@@ -79,7 +79,7 @@ class SetFilmIzle : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> = try {
         val mainPage = app.get(mainUrl, headers = requestHeaders).document
-        val nonce = Regex("""nonce:\s*['\"]([^'\"]+)['\"]""").find(mainPage.html())?.groupValues?.get(1) ?: ""
+        val nonce = Regex("""nonce:\s*['\"]([^'\"]+)['\"]""").find(mainPage.html())?.groupValues?.get(1).orEmpty()
         val search = app.post(
             url = "${mainUrl}/wp-admin/admin-ajax.php",
             headers = requestHeaders + mapOf("X-Requested-With" to "XMLHttpRequest", "Referer" to mainUrl),
@@ -139,26 +139,47 @@ class SetFilmIzle : MainAPI() {
 
     private fun sendMultipartRequest(nonce: String, postId: String, playerName: String, partKey: String, referer: String): Response {
         val requestBody = MultipartBody.Builder().setType(MultipartBody.FORM).apply {
-            addFormDataPart("action", "get_video_url"); addFormDataPart("nonce", nonce); addFormDataPart("post_id", postId)
-            addFormDataPart("player_name", playerName); addFormDataPart("part_key", partKey)
+            addFormDataPart("action", "get_video_url")
+            addFormDataPart("nonce", nonce)
+            addFormDataPart("post_id", postId)
+            addFormDataPart("player_name", playerName)
+            addFormDataPart("part_key", partKey)
         }.build()
-        return OkHttpClient().newCall(Request.Builder().url("${mainUrl}/wp-admin/admin-ajax.php").post(requestBody)
-            .addHeader("Referer", referer).addHeader("User-Agent", requestHeaders["User-Agent"]!!).addHeader("X-Requested-With", "XMLHttpRequest").build()).execute()
+        return OkHttpClient().newCall(
+            Request.Builder().url("${mainUrl}/wp-admin/admin-ajax.php").post(requestBody)
+                .addHeader("Referer", referer)
+                .addHeader("User-Agent", requestHeaders["User-Agent"]!!)
+                .addHeader("X-Requested-With", "XMLHttpRequest")
+                .build()
+        ).execute()
     }
 
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         val document = app.get(data, headers = requestHeaders, referer = mainUrl).document
-        document.select("nav.player a, .dooplay_player_option a").forEach { element ->
-            val name = element.attr("data-player-name")
-            val sourceId = element.attr("data-post-id")
-            val partKey = element.attr("data-part-key")
-            if (sourceId.contains("event") || sourceId.isBlank()) return@forEach
-            val nonce = document.selectFirst("#playex, div#playex")?.attr("data-nonce") ?: ""
-            val body = sendMultipartRequest(nonce, sourceId, name, partKey, data).body.string()
-            val iframe = JSONObject(body).optJSONObject("data")?.optString("url") ?: return@forEach
-            val finalUrl = if (iframe.contains("setplay")) iframe else if (partKey.isNotBlank()) "$iframe?partKey=$partKey" else iframe
-            loadExtractor(finalUrl, "$mainUrl/", subtitleCallback, callback)
-        }
+        val nonce = document.selectFirst("#playex, div#playex")?.attr("data-nonce").orEmpty()
+
+        document.select("nav.player a, .dooplay_player_option a, .player-option a, [data-player-name][data-post-id]")
+            .forEach { element ->
+                val playerName = element.attr("data-player-name").ifBlank { element.text().trim() }
+                val sourceId = element.attr("data-post-id")
+                val partKey = element.attr("data-part-key")
+                if (sourceId.isBlank() || sourceId.contains("event", true)) return@forEach
+
+                try {
+                    val body = sendMultipartRequest(nonce, sourceId, playerName, partKey, data).use { it.body.string() }
+                    val json = JSONObject(body)
+                    val iframe = json.optJSONObject("data")?.optString("url").orEmpty()
+                    if (iframe.isBlank()) return@forEach
+
+                    val finalUrl = if (partKey.isNotBlank() && !iframe.contains("partKey=")) {
+                        if (iframe.contains("?")) "$iframe&partKey=$partKey" else "$iframe?partKey=$partKey"
+                    } else iframe
+
+                    loadExtractor(finalUrl, data, subtitleCallback, callback)
+                } catch (e: Exception) {
+                    Log.e("STF", "Player link alınamadı: $playerName", e)
+                }
+            }
         return true
     }
 }
