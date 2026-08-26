@@ -62,6 +62,11 @@ jobs:
         run: |
           find "$GITHUB_WORKSPACE/src" -type f -name '*.cs3' -exec cp {} "$GITHUB_WORKSPACE/builds/" \;
           cp "$GITHUB_WORKSPACE/src/build/plugins.json" "$GITHUB_WORKSPACE/builds/plugins.json"
+          # Artık kullanılmayan 666FilmIzle eklentisini listeye alma.
+          if command -v jq >/dev/null 2>&1; then
+            jq 'map(select(.internalName != "AltiYuzAltmisAltiFilmIzle" and .name != "AltiYuzAltmisAltiFilmIzle"))' "$GITHUB_WORKSPACE/builds/plugins.json" > "$GITHUB_WORKSPACE/builds/plugins.json.tmp"
+            mv "$GITHUB_WORKSPACE/builds/plugins.json.tmp" "$GITHUB_WORKSPACE/builds/plugins.json"
+          fi
           if [ -f "$GITHUB_WORKSPACE/builds/repo.json" ]; then
             sed -i 's#https://raw.githubusercontent.com/feroxx/Kekik-cloudstream/builds/plugins.json#https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/plugins.json#g' "$GITHUB_WORKSPACE/builds/repo.json"
             sed -i 's/@KekikAkademi/@liberta09/g' "$GITHUB_WORKSPACE/builds/repo.json"
