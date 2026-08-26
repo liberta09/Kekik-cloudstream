@@ -492,7 +492,7 @@
       "keyiflerolsun"
     ],
     "description": "Setfilmizle sitemizde, donma yaşamadan Türkçe dublaj ve altyazılı filmleri ile dizileri muhteşem 1080p full HD kalitesinde izleyebilirsiniz.",
-    "fileSize": 26264,
+    "fileSize": 24230,
     "repositoryUrl": "https://github.com/liberta09/Kekik-cloudstream",
     "language": "tr",
     "tvTypes": [
@@ -501,7 +501,7 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=www.setfilmizle.uk&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-b43e7c53f49f41e8e157d602c84659a1238f64d76a4faa1bd9df1a048aec0ff6"
+    "fileHash": "sha256-a16156ede2e2e8510d0bf467b7a8c5e7220e9b5f9b0cc482b32156763bf89d2f"
   },
   {
     "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/SezonlukDizi.cs3",
