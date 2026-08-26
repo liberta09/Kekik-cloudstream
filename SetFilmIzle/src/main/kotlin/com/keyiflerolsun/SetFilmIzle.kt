@@ -1,4 +1,4 @@
-// ! SetFilmIzle synced from csprofesor/nik-cloudstream, domain kept current
+// ! SetFilmIzle forked from csprofesor/nik-cloudstream; current domain preserved
 
 package com.keyiflerolsun
 
