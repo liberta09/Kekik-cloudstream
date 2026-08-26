@@ -1,21 +1,16 @@
 name: Sync from csprofesor
-
 on:
   push:
     branches: [sync-nik]
-
 permissions:
   contents: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout target repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Replace with csprofesor/nik-cloudstream
         shell: bash
         run: |
@@ -24,6 +19,7 @@ jobs:
           git rm -rf . || true
           cp -a /tmp/nik-cloudstream/. .
           rm -rf .git
+          rm -rf .github/workflows
           git init
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git checkout -b builds
