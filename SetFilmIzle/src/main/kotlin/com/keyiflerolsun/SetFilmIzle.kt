@@ -19,6 +19,7 @@ class SetFilmIzle : MainAPI() {
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
     override val mainPage = mainPageOf(
+        mainUrl to "Son Eklenenler",
         "${mainUrl}/tur/aile/" to "Aile",
         "${mainUrl}/tur/aksiyon/" to "Aksiyon",
         "${mainUrl}/tur/animasyon/" to "Animasyon",
@@ -46,9 +47,13 @@ class SetFilmIzle : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page/"
+        val baseUrl = request.data.trimEnd('/')
+        val url = if (page <= 1) request.data else "$baseUrl/page/$page/"
         val document = app.get(url).document
-        val home = document.select("div.items article, article.item, div.item").mapNotNull { it.toSearchResult() }
+        val home = document.select("div.items article, div.items .item, article.item, div.item")
+            .mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
+
         return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
 
@@ -59,13 +64,13 @@ class SetFilmIzle : MainAPI() {
             ?: selectFirst("img[alt]")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: selectFirst("a")?.text()?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
-        val posterUrl = fixUrlNull(
-            selectFirst("img")?.let { img ->
-                img.attr("data-src").takeIf { it.isNotBlank() }
-                    ?: img.attr("data-lazy-src").takeIf { it.isNotBlank() }
-                    ?: img.attr("src").takeIf { it.isNotBlank() }
-            }
-        )
+        val posterUrl = fixUrlNull(selectFirst("img")?.let { img ->
+            img.attr("data-src").takeIf { it.isNotBlank() }
+                ?: img.attr("data-lazy-src").takeIf { it.isNotBlank() }
+                ?: img.attr("data-original").takeIf { it.isNotBlank() }
+                ?: img.attr("src").takeIf { it.isNotBlank() }
+        })
+
         return if (href.contains("/dizi/")) {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
@@ -82,10 +87,11 @@ class SetFilmIzle : MainAPI() {
                 headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
                 data = mapOf("action" to "ajax_search", "nonce" to nonce, "search" to query)
             )
-            val json = JSONObject(search.text)
-            val html = json.optString("html")
+            val html = JSONObject(search.text).optString("html")
             if (html.isBlank()) emptyList()
-            else Jsoup.parse(html).select("div.items article, article.item, div.item").mapNotNull { it.toSearchResult() }
+            else Jsoup.parse(html).select("div.items article, div.items .item, article.item, div.item")
+                .mapNotNull { it.toSearchResult() }
+                .distinctBy { it.url }
         } catch (e: Exception) {
             Log.e("STF", "Arama hatası", e)
             emptyList()
@@ -97,14 +103,12 @@ class SetFilmIzle : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
         val title = document.selectFirst("h1")?.text()?.substringBefore(" izle")?.trim() ?: return null
-        val poster = fixUrlNull(
-            document.selectFirst("div.poster img, meta[property='og:image'], img")?.let { el ->
-                if (el.tagName() == "meta") el.attr("content")
-                else el.attr("src").takeIf { it.isNotBlank() }
-                    ?: el.attr("data-src").takeIf { it.isNotBlank() }
-                    ?: el.attr("data-lazy-src")
-            }
-        )
+        val poster = fixUrlNull(document.selectFirst("div.poster img, meta[property='og:image'], img")?.let { el ->
+            if (el.tagName() == "meta") el.attr("content")
+            else el.attr("data-src").takeIf { it.isNotBlank() }
+                ?: el.attr("data-lazy-src").takeIf { it.isNotBlank() }
+                ?: el.attr("src").takeIf { it.isNotBlank() }
+        })
         val description = document.selectFirst("div.wp-content p, meta[property='og:description']")?.let { el ->
             if (el.tagName() == "meta") el.attr("content").trim() else el.text().trim()
         }
@@ -119,19 +123,21 @@ class SetFilmIzle : MainAPI() {
             year = document.selectFirst("a[href*='/yil/']")?.text()?.trim()?.toIntOrNull() ?: year
             duration = document.selectFirst("div#info span:containsOwn(Dakika)")?.text()?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() } ?: duration
             val episodes = document.select("div#episodes ul.episodios li").mapNotNull {
-                val epHref = fixUrlNull(it.selectFirst("h4.episodiotitle a")?.attr("href")) ?: return@mapNotNull null
-                val epName = it.selectFirst("h4.episodiotitle a")?.text()?.trim() ?: return@mapNotNull null
+                val epLink = it.selectFirst("h4.episodiotitle a") ?: return@mapNotNull null
+                val epHref = fixUrlNull(epLink.attr("href")) ?: return@mapNotNull null
+                val epName = epLink.text().trim().ifBlank { return@mapNotNull null }
                 val epSeason = Regex("(\\d+)\\.\\s*Sezon").find(epName)?.groupValues?.get(1)?.toIntOrNull()
                 val epEpisode = Regex("(\\d+)\\.\\s*Bölüm").find(epName)?.groupValues?.get(1)?.toIntOrNull()
+
                 newEpisode(epHref) {
-                    this.name = epName
-                    this.season = epSeason
-                    this.episode = epEpisode
+                    name = epName
+                    season = epSeason
+                    episode = epEpisode
                 }
             }
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-                this.posterUrl = poster
-                this.plot = description
+                posterUrl = poster
+                plot = description
                 this.year = year
                 this.tags = tags
                 this.duration = duration
@@ -142,8 +148,8 @@ class SetFilmIzle : MainAPI() {
         }
 
         return newMovieLoadResponse(title, url, TvType.Movie, url) {
-            this.posterUrl = poster
-            this.plot = description
+            posterUrl = poster
+            plot = description
             this.year = year
             this.tags = tags
             this.duration = duration
@@ -160,7 +166,9 @@ class SetFilmIzle : MainAPI() {
             ?: selectFirst("a")?.text()?.trim()
             ?: return null
         val posterUrl = fixUrlNull(selectFirst("img")?.let { img ->
-            img.attr("data-src").takeIf { it.isNotBlank() } ?: img.attr("src")
+            img.attr("data-src").takeIf { it.isNotBlank() }
+                ?: img.attr("data-lazy-src").takeIf { it.isNotBlank() }
+                ?: img.attr("src").takeIf { it.isNotBlank() }
         })
         return if (href.contains("/dizi/")) {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
@@ -170,7 +178,13 @@ class SetFilmIzle : MainAPI() {
     }
 
     private fun sendMultipartRequest(nonce: String, postId: String, playerName: String, partKey: String, referer: String): Response {
-        val formData = mapOf("action" to "get_video_url", "nonce" to nonce, "post_id" to postId, "player_name" to playerName, "part_key" to partKey)
+        val formData = mapOf(
+            "action" to "get_video_url",
+            "nonce" to nonce,
+            "post_id" to postId,
+            "player_name" to playerName,
+            "part_key" to partKey
+        )
         val requestBody = MultipartBody.Builder().setType(MultipartBody.FORM).apply {
             formData.forEach { (key, value) -> addFormDataPart(key, value) }
         }.build()
