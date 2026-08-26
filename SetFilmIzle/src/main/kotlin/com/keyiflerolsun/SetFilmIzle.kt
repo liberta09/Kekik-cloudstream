@@ -19,8 +19,6 @@ class SetFilmIzle : MainAPI() {
     override val hasDownloadSupport   = true
     override val supportedTypes       = setOf(TvType.Movie, TvType.TvSeries)
 
-    // SetFilm'in gerçek içerik listelerini kullanıyoruz. Menü linklerini içerik
-    // kartı gibi taramıyoruz; bu, "Filmler/Diziler" gibi sahte kartları önler.
     override val mainPage = mainPageOf(
         "${mainUrl}/tur/aile/"        to "Aile",
         "${mainUrl}/tur/aksiyon/"     to "Aksiyon",
@@ -54,7 +52,6 @@ class SetFilmIzle : MainAPI() {
         val home = document.select("div.items article")
             .mapNotNull { it.toMainPageResult() }
             .distinctBy { it.url.substringBefore("?").trimEnd('/').lowercase() }
-
         return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
 
@@ -62,20 +59,12 @@ class SetFilmIzle : MainAPI() {
         val title = selectFirst("div.flbaslik")?.text()?.trim()?.takeIf { it.isNotBlank() } ?: return null
         val href = fixUrlNull(selectFirst("a")?.attr("href")) ?: return null
         val normalized = href.substringBefore("?").trimEnd('/').lowercase()
-
-        // Sadece gerçek film/dizi detay sayfalarını kabul et.
         if (!normalized.contains("/film/") && !normalized.contains("/dizi/")) return null
-
         val image = selectFirst("img")
         val posterUrl = fixUrlNull(
-            listOf(
-                image?.attr("data-src").orEmpty(),
-                image?.attr("data-lazy-src").orEmpty(),
-                image?.attr("data-original").orEmpty(),
-                image?.attr("src").orEmpty()
-            ).firstOrNull { it.isNotBlank() }
+            listOf(image?.attr("data-src").orEmpty(), image?.attr("data-lazy-src").orEmpty(), image?.attr("data-original").orEmpty(), image?.attr("src").orEmpty())
+                .firstOrNull { it.isNotBlank() }
         )
-
         return if (normalized.contains("/dizi/")) {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
@@ -95,16 +84,8 @@ class SetFilmIzle : MainAPI() {
         val href = fixUrlNull(selectFirst("div.title a")?.attr("href")) ?: return null
         val normalized = href.substringBefore("?").trimEnd('/').lowercase()
         if (!normalized.contains("/film/") && !normalized.contains("/dizi/")) return null
-
         val image = selectFirst("img")
-        val posterUrl = fixUrlNull(
-            listOf(
-                image?.attr("data-src").orEmpty(),
-                image?.attr("data-lazy-src").orEmpty(),
-                image?.attr("src").orEmpty()
-            ).firstOrNull { it.isNotBlank() }
-        )
-
+        val posterUrl = fixUrlNull(listOf(image?.attr("data-src").orEmpty(), image?.attr("data-lazy-src").orEmpty(), image?.attr("src").orEmpty()).firstOrNull { it.isNotBlank() })
         return if (normalized.contains("/dizi/")) {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
@@ -116,18 +97,14 @@ class SetFilmIzle : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
-
         val title = document.selectFirst("h1")?.text()?.substringBefore(" izle")?.trim() ?: return null
-        val poster = fixUrlNull(
-            document.selectFirst("div.poster img")?.let { image ->
-                listOf(image.attr("data-src"), image.attr("data-lazy-src"), image.attr("src"))
-                    .firstOrNull { it.isNotBlank() }
-            }
-        )
+        val poster = fixUrlNull(document.selectFirst("div.poster img")?.let { image ->
+            listOf(image.attr("data-src"), image.attr("data-lazy-src"), image.attr("src")).firstOrNull { it.isNotBlank() }
+        })
         val description = document.selectFirst("div.wp-content p")?.text()?.trim()
         var year = document.selectFirst("div.extra span.C a")?.text()?.trim()?.toIntOrNull()
         val tags = document.select("div.sgeneros a").map { it.text() }
-        val rating = document.selectFirst("span.dt_rating_vgs")?.text()?.trim()?.toRatingInt()
+        val ratingValue = document.selectFirst("span.dt_rating_vgs")?.text()?.trim()?.toDoubleOrNull()
         var duration = document.selectFirst("span.runtime")?.text()?.split(" ")?.first()?.trim()?.toIntOrNull()
         val recommendations = document.select("div.srelacionados article").mapNotNull { it.toRecommendationResult() }
         val actors = document.select("span.valor a").map { Actor(it.text()) }
@@ -136,36 +113,32 @@ class SetFilmIzle : MainAPI() {
         if (url.contains("/dizi/")) {
             year = document.selectFirst("a[href*='/yil/']")?.text()?.trim()?.toIntOrNull()
             duration = document.selectFirst("div#info span:containsOwn(Dakika)")?.text()?.split(" ")?.first()?.trim()?.toIntOrNull()
-
             val episodes = document.select("div#episodes ul.episodios li").mapNotNull {
                 val epHref = fixUrlNull(it.selectFirst("div.episodiotitle a")?.attr("href")) ?: return@mapNotNull null
                 val epName = it.selectFirst("div.episodiotitle a")?.ownText()?.trim() ?: return@mapNotNull null
                 val epDetail = it.selectFirst("div.numerando")?.text()?.split(" - ") ?: return@mapNotNull null
                 val epSeason = epDetail.firstOrNull()?.toIntOrNull()
                 val epEpisode = epDetail.lastOrNull()?.toIntOrNull()
-
-                Episode(data = epHref, name = epName, season = epSeason, episode = epEpisode)
+                newEpisode(epHref) { name = epName; season = epSeason; episode = epEpisode }
             }
-
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-                this.posterUrl = poster
-                this.plot = description
+                posterUrl = poster
+                plot = description
                 this.year = year
                 this.tags = tags
-                this.rating = rating
+                ratingValue?.let { score = Score.from10(it) }
                 this.duration = duration
                 this.recommendations = recommendations
                 addActors(actors)
                 addTrailer(trailer)
             }
         }
-
         return newMovieLoadResponse(title, url, TvType.Movie, url) {
-            this.posterUrl = poster
-            this.plot = description
+            posterUrl = poster
+            plot = description
             this.year = year
             this.tags = tags
-            this.rating = rating
+            ratingValue?.let { score = Score.from10(it) }
             this.duration = duration
             this.recommendations = recommendations
             addActors(actors)
@@ -179,12 +152,7 @@ class SetFilmIzle : MainAPI() {
         val href = fixUrlNull(selectFirst("a")?.attr("href")) ?: return null
         val normalized = href.substringBefore("?").trimEnd('/').lowercase()
         if (!normalized.contains("/film/") && !normalized.contains("/dizi/")) return null
-
-        val posterUrl = fixUrlNull(
-            listOf(image.attr("data-src"), image.attr("data-lazy-src"), image.attr("src"))
-                .firstOrNull { it.isNotBlank() }
-        )
-
+        val posterUrl = fixUrlNull(listOf(image.attr("data-src"), image.attr("data-lazy-src"), image.attr("src")).firstOrNull { it.isNotBlank() })
         return if (normalized.contains("/dizi/")) {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
@@ -192,57 +160,29 @@ class SetFilmIzle : MainAPI() {
         }
     }
 
-    override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
+    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         Log.d("STF", "data » $data")
         val document = app.get(data).document
-
-        // Güncel SetFilm oynatıcı yapısı: nav.player içindeki Change_Source()
-        // parametrelerinden kaynak ID + sağlayıcı adı + partKey alınır.
         document.select("nav.player a").forEach { element ->
             val onclick = element.attr("onclick")
             if (!onclick.contains("Change_Source")) return@forEach
-
-            val sourceParts = onclick
-                .substringAfter("Change_Source('")
-                .substringBefore("');")
-                .split("','")
-
+            val sourceParts = onclick.substringAfter("Change_Source('").substringBefore("');").split("','")
             val sourceId = sourceParts.getOrNull(0).orEmpty()
             val providerName = sourceParts.getOrNull(1).orEmpty()
             val partKey = sourceParts.getOrNull(2).orEmpty()
-
             if (sourceId.isBlank() || sourceId.contains("event", ignoreCase = true)) return@forEach
-
             try {
                 val sourceUrl = "${mainUrl}/play/play.php?ser=${sourceId}&name=${providerName}&partKey=${partKey}"
-                val sourceDoc = app.get(sourceUrl, referer = data).document
-                val sourceIframe = sourceDoc.selectFirst("iframe")?.attr("src")?.trim().orEmpty()
+                val sourceIframe = app.get(sourceUrl, referer = data).document.selectFirst("iframe")?.attr("src")?.trim().orEmpty()
                 if (sourceIframe.isBlank()) return@forEach
-
-                Log.d("STF", "provider=$providerName iframe=$sourceIframe")
-
-                val extractorUrl = if (
-                    sourceIframe.contains("explay.store", ignoreCase = true) ||
-                    sourceIframe.contains("setplay.site", ignoreCase = true)
-                ) {
-                    if (sourceIframe.contains("partKey=")) sourceIframe
-                    else if (sourceIframe.contains("?")) "$sourceIframe&partKey=$partKey"
-                    else "$sourceIframe?partKey=$partKey"
-                } else {
-                    sourceIframe
-                }
-
+                val extractorUrl = if (sourceIframe.contains("explay.store", ignoreCase = true) || sourceIframe.contains("setplay.site", ignoreCase = true)) {
+                    if (sourceIframe.contains("partKey=")) sourceIframe else if (sourceIframe.contains("?")) "$sourceIframe&partKey=$partKey" else "$sourceIframe?partKey=$partKey"
+                } else sourceIframe
                 loadExtractor(extractorUrl, "${mainUrl}/", subtitleCallback, callback)
             } catch (e: Exception) {
                 Log.e("STF", "Provider link alınamadı: $providerName", e)
             }
         }
-
         return true
     }
 }
