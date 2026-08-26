@@ -111,9 +111,6 @@ class SetFilmIzle : MainAPI() {
         var year = document.selectFirst("div.extra span.C a, a[href*='/yil/']")?.text()?.trim()?.toIntOrNull()
         val tags = document.select("div.sgeneros a").map { it.text().trim() }.filter { it.isNotBlank() }
         var duration = document.selectFirst("span.runtime")?.text()?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() }
-        val imdbId = document.selectFirst("a[href*='imdb.com/title/']")?.attr("href")?.let {
-            Regex("tt\\d+").find(it)?.value
-        }
         val recommendations = document.select("div.srelacionados article, div.srelacionados .item").mapNotNull { it.toRecommendationResult() }
         val actors = document.select("span.valor a").map { Actor(it.text().trim()) }
         val trailer = Regex("""embed/(.*)\\?rel""").find(document.html())?.groupValues?.get(1)?.let { "https://www.youtube.com/embed/$it" }
@@ -138,7 +135,6 @@ class SetFilmIzle : MainAPI() {
                 this.year = year
                 this.tags = tags
                 this.duration = duration
-                this.imdbId = imdbId
                 this.recommendations = recommendations
                 addActors(actors)
                 addTrailer(trailer)
@@ -151,7 +147,6 @@ class SetFilmIzle : MainAPI() {
             this.year = year
             this.tags = tags
             this.duration = duration
-            this.imdbId = imdbId
             this.recommendations = recommendations
             addActors(actors)
             addTrailer(trailer)
