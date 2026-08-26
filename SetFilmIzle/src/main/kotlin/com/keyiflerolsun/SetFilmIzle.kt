@@ -60,7 +60,8 @@ class SetFilmIzle : MainAPI() {
         val url = if (page <= 1) request.data else "$baseUrl/page/$page/"
         val document = app.get(url, headers = requestHeaders, referer = mainUrl).document
 
-        // Only parse actual content cards. Do not treat navigation/category links as movies.
+        // Dooplay-style pages contain navigation cards and content cards in the same
+        // .items container. Only accept real /film/ and /dizi/ detail URLs.
         val selectors = listOf(
             ".items .item",
             ".items article.item",
@@ -75,44 +76,68 @@ class SetFilmIzle : MainAPI() {
 
         val home = document.select(selectors)
             .mapNotNull { it.toSearchResult() }
-            .distinctBy { it.url }
+            .distinctBy { normalizeContentUrl(it.url) }
+            .distinctBy { it.name.lowercase().replace(Regex("[^a-z0-9çğıöşü]+"), "") }
 
         return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
 
+    private fun normalizeContentUrl(url: String): String =
+        url.substringBefore("?").substringBefore("#").trimEnd('/').lowercase()
+
     private fun Element.findPoster(): String? {
-        val img = selectFirst("img") ?: return null
-        val candidates = listOf(
-            img.attr("data-src"),
-            img.attr("data-lazy-src"),
-            img.attr("data-original"),
-            img.attr("data-image"),
-            img.attr("data-poster"),
-            img.attr("src"),
-            img.attr("srcset").substringBefore(',').substringBefore(' ')
-        )
-        return candidates
+        val img = selectFirst("img")
+        val imageCandidates = mutableListOf<String>()
+        if (img != null) {
+            imageCandidates += listOf(
+                img.attr("data-src"),
+                img.attr("data-lazy-src"),
+                img.attr("data-original"),
+                img.attr("data-image"),
+                img.attr("data-poster"),
+                img.attr("data-lazy"),
+                img.attr("src"),
+                img.attr("srcset").substringBefore(',').substringBefore(' ')
+            )
+        }
+
+        // Some SetFilm cards use a background image on .poster instead of img src.
+        val style = selectFirst(".poster, .poster img, [style*='background-image']")?.attr("style").orEmpty()
+        Regex("url\\((?:'|\\\")?([^)'\\\"]+)(?:'|\\\")?\\)").find(style)?.groupValues?.get(1)?.let {
+            imageCandidates.add(0, it)
+        }
+
+        return imageCandidates
             .map { it.trim() }
-            .firstOrNull { it.isNotBlank() && !it.startsWith("data:image") }
+            .firstOrNull { it.isNotBlank() && !it.startsWith("data:image") && !it.contains("placeholder", true) }
             ?.let(::fixUrlNull)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
         val link = selectFirst("a[href]") ?: return null
-        val href = fixUrlNull(link.attr("href")) ?: return null
-        if (!href.contains("/film/") && !href.contains("/dizi/")) return null
+        val rawHref = link.attr("href").trim()
+        val href = fixUrlNull(rawHref) ?: return null
+        val path = href.substringBefore("?").substringBefore("#").trimEnd('/').lowercase()
+
+        // Do not turn the site's /film/ and /dizi/ index buttons into content items.
+        if (path == "$mainUrl/film" || path == "$mainUrl/dizi" ||
+            path == "$mainUrl/filmler" || path == "$mainUrl/diziler") return null
+        if (!path.contains("/film/") && !path.contains("/dizi/")) return null
 
         val img = selectFirst("img") ?: link.selectFirst("img")
-        val title = selectFirst(".data h3, .data h2, .title, .name, h3, h2, h4")?.text()?.trim()
+        val title = selectFirst(".data h3, .data h2, .data .title, .data .name, .title, .name, h3, h2, h4")?.text()?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: img?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: link.attr("title").trim().takeIf { it.isNotBlank() }
-            ?: link.text().trim().takeIf { it.isNotBlank() }
             ?: return null
+
+        // Reject obvious navigation labels even when their href happens to match /film/ or /dizi/.
+        val blockedTitles = setOf("filmler", "filmleri", "diziler", "dizileri", "tümü", "son filmler", "son diziler")
+        if (title.lowercase() in blockedTitles) return null
 
         val posterUrl = findPoster() ?: link.findPoster()
 
-        return if (href.contains("/dizi/")) {
+        return if (path.contains("/dizi/")) {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
                 this.posterUrl = posterUrl
             }
@@ -136,7 +161,8 @@ class SetFilmIzle : MainAPI() {
         else Jsoup.parse(html)
             .select(".items .item, .film-item, .movie-item, .series-item, .film-card, .movie-card, .series-card, .post-item")
             .mapNotNull { it.toSearchResult() }
-            .distinctBy { it.url }
+            .distinctBy { normalizeContentUrl(it.url) }
+            .distinctBy { it.name.lowercase().replace(Regex("[^a-z0-9çğıöşü]+"), "") }
     } catch (e: Exception) {
         Log.e("STF", "Arama hatası", e)
         emptyList()
