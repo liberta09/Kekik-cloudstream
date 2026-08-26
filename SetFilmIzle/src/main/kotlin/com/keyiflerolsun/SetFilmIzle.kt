@@ -59,37 +59,68 @@ class SetFilmIzle : MainAPI() {
         val baseUrl = request.data.trimEnd('/')
         val url = if (page <= 1) request.data else "$baseUrl/page/$page/"
         val document = app.get(url, headers = requestHeaders, referer = mainUrl).document
-        val home = document.select(
-            ".items .item, .items article, .items .item.tvshows, .items .item.movies, .row .item, article.item, " +
-            ".film-item, .movie-item, .series-item, .card, .film-card, .movie-card, .series-card, " +
-            "article, a[href*='/film/'], a[href*='/dizi/']"
-        ).mapNotNull { it.toSearchResult() }.distinctBy { it.url }
+
+        // Only parse actual content cards. Do not treat navigation/category links as movies.
+        val selectors = listOf(
+            ".items .item",
+            ".items article.item",
+            ".film-item",
+            ".movie-item",
+            ".series-item",
+            ".film-card",
+            ".movie-card",
+            ".series-card",
+            ".post-item"
+        ).joinToString(", ")
+
+        val home = document.select(selectors)
+            .mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
+
         return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
 
     private fun Element.findPoster(): String? {
         val img = selectFirst("img") ?: return null
         val candidates = listOf(
-            img.attr("data-src"), img.attr("data-lazy-src"), img.attr("data-original"),
-            img.attr("data-image"), img.attr("data-poster"), img.attr("src"),
+            img.attr("data-src"),
+            img.attr("data-lazy-src"),
+            img.attr("data-original"),
+            img.attr("data-image"),
+            img.attr("data-poster"),
+            img.attr("src"),
             img.attr("srcset").substringBefore(',').substringBefore(' ')
         )
-        return candidates.firstOrNull { it.isNotBlank() }?.let(::fixUrlNull)
+        return candidates
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() && !it.startsWith("data:image") }
+            ?.let(::fixUrlNull)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = if (tagName() == "a") this else selectFirst("a[href]") ?: return null
+        val link = selectFirst("a[href]") ?: return null
         val href = fixUrlNull(link.attr("href")) ?: return null
         if (!href.contains("/film/") && !href.contains("/dizi/")) return null
-        val card = if (tagName() == "a") parent()?.parent()?.takeIf { it.selectFirst("a[href]") != null } ?: parent() ?: this else this
-        val img = card.selectFirst("img") ?: link.selectFirst("img")
-        val title = card.selectFirst(".data h3, .data h2, .title, .name, h3, h2, h4")?.text()?.trim()?.takeIf { it.isNotBlank() }
+
+        val img = selectFirst("img") ?: link.selectFirst("img")
+        val title = selectFirst(".data h3, .data h2, .title, .name, h3, h2, h4")?.text()?.trim()
+            ?.takeIf { it.isNotBlank() }
             ?: img?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: link.attr("title").trim().takeIf { it.isNotBlank() }
-            ?: link.text().trim().takeIf { it.isNotBlank() } ?: return null
-        val posterUrl = card.findPoster() ?: link.findPoster()
-        return if (href.contains("/dizi/")) newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
-        else newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
+            ?: link.text().trim().takeIf { it.isNotBlank() }
+            ?: return null
+
+        val posterUrl = findPoster() ?: link.findPoster()
+
+        return if (href.contains("/dizi/")) {
+            newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+                this.posterUrl = posterUrl
+            }
+        } else {
+            newMovieSearchResponse(title, href, TvType.Movie) {
+                this.posterUrl = posterUrl
+            }
+        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> = try {
@@ -101,7 +132,11 @@ class SetFilmIzle : MainAPI() {
             data = mapOf("action" to "ajax_search", "nonce" to nonce, "search" to query)
         )
         val html = JSONObject(search.text).optString("html")
-        if (html.isBlank()) emptyList() else Jsoup.parse(html).select("a[href*='/film/'], a[href*='/dizi/'], .items .item, article, .card").mapNotNull { it.toSearchResult() }.distinctBy { it.url }
+        if (html.isBlank()) emptyList()
+        else Jsoup.parse(html)
+            .select(".items .item, .film-item, .movie-item, .series-item, .film-card, .movie-card, .series-card, .post-item")
+            .mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
     } catch (e: Exception) {
         Log.e("STF", "Arama hatası", e)
         emptyList()
@@ -148,7 +183,7 @@ class SetFilmIzle : MainAPI() {
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         val document = app.get(data, headers = requestHeaders, referer = mainUrl).document
         val nonce = document.selectFirst("#playex, div#playex, [data-nonce]")?.attr("data-nonce").orEmpty()
-        document.select("nav.player a, .dooplay_player_option a, .player-option a, [data-player-name][data-post-id], [data-post-id]").forEach { element ->
+        document.select("nav.player a, .dooplay_player_option a, .player-option a, [data-player-name][data-post-id]").forEach { element ->
             val playerName = element.attr("data-player-name").ifBlank { element.text().trim() }
             val sourceId = element.attr("data-post-id")
             val partKey = element.attr("data-part-key")
