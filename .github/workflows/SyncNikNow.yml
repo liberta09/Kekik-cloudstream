@@ -11,11 +11,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Replace with csprofesor/nik-cloudstream
+      - name: Replace with csprofesor/nik-cloudstream builds
         shell: bash
         run: |
           set -e
-          git clone --depth 1 --branch master https://github.com/csprofesor/nik-cloudstream.git /tmp/nik-cloudstream
+          git clone --depth 1 --branch builds https://github.com/csprofesor/nik-cloudstream.git /tmp/nik-cloudstream
           git rm -rf . || true
           cp -a /tmp/nik-cloudstream/. .
           rm -rf .git
@@ -24,7 +24,7 @@ jobs:
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git checkout -b builds
           git add -A
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Replace repository with csprofesor/nik-cloudstream'
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Sync builds from csprofesor/nik-cloudstream'
           git push origin HEAD:builds --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
