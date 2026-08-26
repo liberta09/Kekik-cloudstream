@@ -11,7 +11,7 @@ import org.jsoup.Jsoup
 import okhttp3.*
 
 class SetFilmIzle : MainAPI() {
-    override var mainUrl = "https://www.setfilmizle.ltd"
+    override var mainUrl = "https://www.setfilmizle.live"
     override var name = "SetFilmIzle"
     override val hasMainPage = true
     override var lang = "tr"
