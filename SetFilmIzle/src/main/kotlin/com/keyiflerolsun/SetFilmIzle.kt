@@ -1,4 +1,4 @@
-// SetFilmIzle - SetFilm site yapısına göre uyarlanmıştır.
+// ! SetFilmIzle synced from csprofesor/nik-cloudstream, domain kept current
 
 package com.keyiflerolsun
 
@@ -8,6 +8,9 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
+import org.json.JSONObject
+import org.jsoup.Jsoup
+import okhttp3.*
 
 class SetFilmIzle : MainAPI() {
     override var mainUrl = "https://www.setfilmizle.ltd"
@@ -15,8 +18,6 @@ class SetFilmIzle : MainAPI() {
     override val hasMainPage = true
     override var lang = "tr"
     override val hasQuickSearch = false
-    override val hasChromecastSupport = true
-    override val hasDownloadSupport = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
     override val mainPage = mainPageOf(
@@ -49,76 +50,41 @@ class SetFilmIzle : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page/"
         val document = app.get(url).document
-        val cards = document.select(
-            "div.film-list div.item-relative, div.film-list article, div.items article, article.item-relative"
-        )
-        val results = cards.mapNotNull { it.toMainPageResult() }
-            .distinctBy { it.url.substringBefore("?").trimEnd('/').lowercase() }
-        return newHomePageResponse(request.name, results, hasNext = results.isNotEmpty())
+        val home = document.select("div.items article").mapNotNull { it.toMainPageResult() }
+        return newHomePageResponse(request.name, home)
     }
 
     private fun Element.toMainPageResult(): SearchResponse? {
-        val link = selectFirst("a.item, a[href*='/film/'], a[href*='/dizi/'], a") ?: return null
-        val href = fixUrlNull(link.attr("href")) ?: return null
-        val normalized = href.substringBefore("?").trimEnd('/').lowercase()
-        if (!normalized.contains("/film/") && !normalized.contains("/dizi/")) return null
-
-        val title = listOf(
-            link.attr("data-title"),
-            selectFirst("div.flbaslik")?.text().orEmpty(),
-            selectFirst("h2")?.text().orEmpty(),
-            selectFirst("h3")?.text().orEmpty(),
-            selectFirst(".title")?.text().orEmpty(),
-            selectFirst("img")?.attr("alt").orEmpty()
-        ).map { it.trim() }.firstOrNull { it.isNotBlank() } ?: return null
-
-        val image = selectFirst("img")
-        val poster = fixUrlNull(
-            listOf(
-                image?.attr("data-src").orEmpty(),
-                image?.attr("data-lazy-src").orEmpty(),
-                image?.attr("data-original").orEmpty(),
-                image?.attr("data-poster").orEmpty(),
-                image?.attr("src").orEmpty()
-            ).firstOrNull { it.isNotBlank() }
-        )
-
-        return if (normalized.contains("/dizi/")) {
-            newTvSeriesSearchResponse(title, href, TvType.TvSeries) { posterUrl = poster }
+        val title = selectFirst("h2")?.text() ?: return null
+        val href = fixUrlNull(selectFirst("a")?.attr("href")) ?: return null
+        val posterUrl = fixUrlNull(selectFirst("img")?.attr("data-src") ?: selectFirst("img")?.attr("src"))
+        return if (href.contains("/dizi/")) {
+            newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
-            newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
+            newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
         }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val document = app.get("${mainUrl}/?s=${query}").document
-        return document.select(
-            "div.result-item article, div.film-list div.item-relative, div.film-list article"
-        ).mapNotNull { it.toSearchResult() }
-            .distinctBy { it.url.substringBefore("?").trimEnd('/').lowercase() }
+        val mainPage = app.get(mainUrl).document
+        val nonce = Regex("""nonce: '(.*)'""").find(mainPage.html())?.groupValues?.get(1) ?: ""
+        val search = app.post(
+            url = "${mainUrl}/wp-admin/admin-ajax.php",
+            headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
+            data = mapOf("action" to "ajax_search", "nonce" to nonce, "search" to query)
+        )
+        val document = Jsoup.parse(JSONObject(search.text).getString("html"))
+        return document.select("div.items article").mapNotNull { it.toSearchResult() }
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = selectFirst("div.title a, a.item, a[href*='/film/'], a[href*='/dizi/'], a") ?: return null
-        val href = fixUrlNull(link.attr("href")) ?: return null
-        val normalized = href.substringBefore("?").trimEnd('/').lowercase()
-        if (!normalized.contains("/film/") && !normalized.contains("/dizi/")) return null
-        val title = listOf(
-            link.attr("data-title"),
-            link.text(),
-            selectFirst("div.title")?.text().orEmpty(),
-            selectFirst("div.flbaslik")?.text().orEmpty(),
-            selectFirst("img")?.attr("alt").orEmpty()
-        ).map { it.trim() }.firstOrNull { it.isNotBlank() } ?: return null
-        val image = selectFirst("img")
-        val poster = fixUrlNull(
-            listOf(image?.attr("data-src").orEmpty(), image?.attr("data-lazy-src").orEmpty(), image?.attr("data-original").orEmpty(), image?.attr("src").orEmpty())
-                .firstOrNull { it.isNotBlank() }
-        )
-        return if (normalized.contains("/dizi/")) {
-            newTvSeriesSearchResponse(title, href, TvType.TvSeries) { posterUrl = poster }
+        val title = selectFirst("h2")?.text() ?: return null
+        val href = fixUrlNull(selectFirst("a")?.attr("href")) ?: return null
+        val posterUrl = fixUrlNull(selectFirst("img")?.attr("data-src") ?: selectFirst("img")?.attr("src"))
+        return if (href.contains("/dizi/")) {
+            newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
-            newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
+            newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
         }
     }
 
@@ -127,94 +93,80 @@ class SetFilmIzle : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
         val title = document.selectFirst("h1")?.text()?.substringBefore(" izle")?.trim() ?: return null
-        val poster = fixUrlNull(document.selectFirst("div.poster img, .poster img")?.let { image ->
-            listOf(image.attr("data-src"), image.attr("data-lazy-src"), image.attr("data-original"), image.attr("src")).firstOrNull { it.isNotBlank() }
+        val poster = fixUrlNull(document.selectFirst("div.poster img")?.let { img ->
+            listOf(img.attr("src"), img.attr("data-src"), img.attr("data-lazy-src")).firstOrNull { it.isNotBlank() }
         })
-        val description = document.selectFirst("div.wp-content p, .wp-content p")?.text()?.trim()
+        val description = document.selectFirst("div.wp-content p")?.text()?.trim()
         var year = document.selectFirst("div.extra span.C a")?.text()?.trim()?.toIntOrNull()
         val tags = document.select("div.sgeneros a").map { it.text() }
-        val ratingValue = document.selectFirst("span.dt_rating_vgs")?.text()?.trim()?.toDoubleOrNull()
         var duration = document.selectFirst("span.runtime")?.text()?.split(" ")?.first()?.trim()?.toIntOrNull()
         val recommendations = document.select("div.srelacionados article").mapNotNull { it.toRecommendationResult() }
         val actors = document.select("span.valor a").map { Actor(it.text()) }
-        val trailer = Regex("""embed\\/(.*)\\?rel""").find(document.html())?.groupValues?.get(1)?.let { "https://www.youtube.com/embed/$it" }
+        val trailer = Regex("""embed/(.*)\?rel""").find(document.html())?.groupValues?.get(1)?.let { "https://www.youtube.com/embed/$it" }
 
         if (url.contains("/dizi/")) {
             year = document.selectFirst("a[href*='/yil/']")?.text()?.trim()?.toIntOrNull()
             duration = document.selectFirst("div#info span:containsOwn(Dakika)")?.text()?.split(" ")?.first()?.trim()?.toIntOrNull()
             val episodes = document.select("div#episodes ul.episodios li").mapNotNull {
-                val epLink = it.selectFirst("div.episodiotitle a") ?: return@mapNotNull null
-                val epHref = fixUrlNull(epLink.attr("href")) ?: return@mapNotNull null
-                val epName = epLink.ownText().trim().ifBlank { epLink.text().trim() }
-                val epDetail = it.selectFirst("div.numerando")?.text()?.split(" - ") ?: return@mapNotNull null
-                newEpisode(epHref) {
-                    name = epName
-                    season = epDetail.firstOrNull()?.toIntOrNull()
-                    episode = epDetail.lastOrNull()?.toIntOrNull()
-                }
+                val epHref = fixUrlNull(it.selectFirst("h4.episodiotitle a")?.attr("href")) ?: return@mapNotNull null
+                val epName = it.selectFirst("h4.episodiotitle a")?.ownText()?.trim() ?: return@mapNotNull null
+                val epDetail = it.selectFirst("h4.episodiotitle a")?.ownText()?.trim() ?: return@mapNotNull null
+                val epSeason = epDetail.substringBefore(". Sezon").toIntOrNull()
+                val epEpisode = epDetail.split("Sezon ").last().substringBefore(". Bölüm").toIntOrNull()
+                newEpisode(epHref) { name = epName; season = epSeason; episode = epEpisode }
             }
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-                posterUrl = poster
-                plot = description
-                this.year = year
-                this.tags = tags
-                ratingValue?.let { score = Score.from10(it) }
-                this.duration = duration
-                this.recommendations = recommendations
-                addActors(actors)
-                addTrailer(trailer)
+                this.posterUrl = poster; this.plot = description; this.year = year; this.tags = tags; this.duration = duration
+                this.recommendations = recommendations; addActors(actors); addTrailer(trailer)
             }
         }
         return newMovieLoadResponse(title, url, TvType.Movie, url) {
-            posterUrl = poster
-            plot = description
-            this.year = year
-            this.tags = tags
-            ratingValue?.let { score = Score.from10(it) }
-            this.duration = duration
-            this.recommendations = recommendations
-            addActors(actors)
-            addTrailer(trailer)
+            this.posterUrl = poster; this.plot = description; this.year = year; this.tags = tags; this.duration = duration
+            this.recommendations = recommendations; addActors(actors); addTrailer(trailer)
         }
     }
 
     private fun Element.toRecommendationResult(): SearchResponse? {
-        val link = selectFirst("a[href*='/film/'], a[href*='/dizi/'], a") ?: return null
-        val href = fixUrlNull(link.attr("href")) ?: return null
-        val normalized = href.substringBefore("?").trimEnd('/').lowercase()
-        if (!normalized.contains("/film/") && !normalized.contains("/dizi/")) return null
-        val image = link.selectFirst("img") ?: selectFirst("img") ?: return null
-        val title = listOf(image.attr("alt"), link.attr("data-title"), link.text()).map { it.trim() }.firstOrNull { it.isNotBlank() } ?: return null
-        val poster = fixUrlNull(listOf(image.attr("data-src"), image.attr("data-lazy-src"), image.attr("data-original"), image.attr("src")).firstOrNull { it.isNotBlank() })
-        return if (normalized.contains("/dizi/")) {
-            newTvSeriesSearchResponse(title, href, TvType.TvSeries) { posterUrl = poster }
+        val title = selectFirst("a img")?.attr("alt") ?: return null
+        val href = fixUrlNull(selectFirst("a")?.attr("href")) ?: return null
+        val posterUrl = fixUrlNull(selectFirst("a img")?.attr("data-src") ?: selectFirst("a img")?.attr("src"))
+        return if (href.contains("/dizi/")) {
+            newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
-            newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
+            newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
         }
+    }
+
+    private fun sendMultipartRequest(nonce: String, postId: String, playerName: String, partKey: String, referer: String): Response {
+        val formData = mapOf("action" to "get_video_url", "nonce" to nonce, "post_id" to postId, "player_name" to playerName, "part_key" to partKey)
+        val requestBody = MultipartBody.Builder().setType(MultipartBody.FORM).apply {
+            formData.forEach { (key, value) -> addFormDataPart(key, value) }
+        }.build()
+        val request = Request.Builder()
+            .url("${mainUrl}/wp-admin/admin-ajax.php")
+            .post(requestBody)
+            .addHeader("Referer", referer)
+            .addHeader("X-Requested-With", "XMLHttpRequest")
+            .build()
+        return OkHttpClient().newCall(request).execute()
     }
 
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         Log.d("STF", "data » $data")
         val document = app.get(data).document
-        document.select("nav.player a, .player a, a[onclick*='Change_Source']").forEach { element ->
-            val onclick = element.attr("onclick")
-            if (!onclick.contains("Change_Source")) return@forEach
-            val sourceParts = onclick.substringAfter("Change_Source('").substringBefore("');").split("','")
-            val sourceId = sourceParts.getOrNull(0).orEmpty()
-            val providerName = sourceParts.getOrNull(1).orEmpty()
-            val partKey = sourceParts.getOrNull(2).orEmpty()
-            if (sourceId.isBlank() || sourceId.contains("event", ignoreCase = true)) return@forEach
-            try {
-                val sourceUrl = "${mainUrl}/play/play.php?ser=${sourceId}&name=${providerName}&partKey=${partKey}"
-                val sourceIframe = app.get(sourceUrl, referer = data).document.selectFirst("iframe")?.attr("src")?.trim().orEmpty()
-                if (sourceIframe.isBlank()) return@forEach
-                val extractorUrl = if (sourceIframe.contains("explay.store", ignoreCase = true) || sourceIframe.contains("setplay.site", ignoreCase = true)) {
-                    if (sourceIframe.contains("partKey=")) sourceIframe else if (sourceIframe.contains("?")) "$sourceIframe&partKey=$partKey" else "$sourceIframe?partKey=$partKey"
-                } else sourceIframe
-                loadExtractor(extractorUrl, "${mainUrl}/", subtitleCallback, callback)
-            } catch (e: Exception) {
-                Log.e("STF", "Provider link alınamadı: $providerName", e)
-            }
+        document.select("nav.player a").map { element ->
+            val sourceId = element.attr("data-post-id")
+            val name = element.attr("data-player-name")
+            val partKey = element.attr("data-part-key").takeIf { it.isNotEmpty() }
+            Triple(name, sourceId, partKey)
+        }.forEach { (name, sourceId, partKey) ->
+            if (sourceId.contains("event") || sourceId.isBlank()) return@forEach
+            val nonce = document.selectFirst("div#playex")?.attr("data-nonce") ?: ""
+            val sourceBody = sendMultipartRequest(nonce, sourceId, name, partKey ?: "", data).use { it.body.string() }
+            val sourceIframe = JSONObject(sourceBody).optJSONObject("data")?.optString("url") ?: return@forEach
+            Log.d("STF", "iframe » $sourceIframe")
+            val finalUrl = if (sourceIframe.contains("setplay")) sourceIframe else if (partKey != null) "$sourceIframe?partKey=$partKey" else sourceIframe
+            loadExtractor(finalUrl, "$mainUrl/", subtitleCallback, callback)
         }
         return true
     }
