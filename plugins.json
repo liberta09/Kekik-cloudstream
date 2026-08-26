@@ -483,27 +483,6 @@
     "fileHash": "sha256-280dd0ca962ffbd12da25e685a3b3ce6bd163076b8c3dc796a6fabf33287ee78"
   },
   {
-    "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/SetFilmIzle.cs3",
-    "status": 1,
-    "version": 30,
-    "name": "SetFilmIzle",
-    "internalName": "SetFilmIzle",
-    "authors": [
-      "keyiflerolsun"
-    ],
-    "description": "Setfilmizle sitemizde, donma yaşamadan Türkçe dublaj ve altyazılı filmleri ile dizileri muhteşem 1080p full HD kalitesinde izleyebilirsiniz.",
-    "fileSize": 25122,
-    "repositoryUrl": "https://github.com/liberta09/Kekik-cloudstream",
-    "language": "tr",
-    "tvTypes": [
-      "Movie",
-      "TvSeries"
-    ],
-    "iconUrl": "https://www.google.com/s2/favicons?domain=www.setfilmizle.uk&sz=%size%",
-    "apiVersion": 1,
-    "fileHash": "sha256-6d54f24e435b82d1d8144577aecd450169d5ec0cdea63e002d1b153fb73ef18c"
-  },
-  {
     "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/SezonlukDizi.cs3",
     "status": 1,
     "version": 9,
