@@ -1,0 +1,34 @@
+name: Sync from csprofesor
+
+on:
+  push:
+    branches: [sync-nik]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Replace with csprofesor/nik-cloudstream
+        shell: bash
+        run: |
+          set -e
+          git clone --depth 1 --branch master https://github.com/csprofesor/nik-cloudstream.git /tmp/nik-cloudstream
+          git rm -rf . || true
+          cp -a /tmp/nik-cloudstream/. .
+          rm -rf .git
+          git init
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git checkout -b builds
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Replace repository with csprofesor/nik-cloudstream'
+          git push origin HEAD:builds --force
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
