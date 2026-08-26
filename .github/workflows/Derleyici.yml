@@ -35,7 +35,8 @@ jobs:
         with:
           ref: builds
           path: builds
-          fetch-depth: 1
+          fetch-depth: 0
+          persist-credentials: true
           token: ${{ github.token }}
 
       - name: Eski derlemeleri temizle
@@ -62,7 +63,6 @@ jobs:
         run: |
           find "$GITHUB_WORKSPACE/src" -type f -name '*.cs3' -exec cp {} "$GITHUB_WORKSPACE/builds/" \;
           cp "$GITHUB_WORKSPACE/src/build/plugins.json" "$GITHUB_WORKSPACE/builds/plugins.json"
-          # Artık kullanılmayan 666FilmIzle eklentisini listeye alma.
           if command -v jq >/dev/null 2>&1; then
             jq 'map(select(.internalName != "AltiYuzAltmisAltiFilmIzle" and .name != "AltiYuzAltmisAltiFilmIzle"))' "$GITHUB_WORKSPACE/builds/plugins.json" > "$GITHUB_WORKSPACE/builds/plugins.json.tmp"
             mv "$GITHUB_WORKSPACE/builds/plugins.json.tmp" "$GITHUB_WORKSPACE/builds/plugins.json"
@@ -79,7 +79,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git add -A
           git diff --cached --quiet && echo "Değişiklik yok" && exit 0
           git commit -m "Build ${{ github.sha }}"
-          git push https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:builds
+          git push origin HEAD:builds
