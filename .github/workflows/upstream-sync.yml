@@ -1,0 +1,38 @@
+name: Ana Depodan Güncelle
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ana depoyu senkronize et
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upstream'u ekle ve güncellemeleri al
+        run: |
+          git remote add upstream https://github.com/feroxx/Kekik-cloudstream.git
+          git fetch upstream master
+          git checkout master
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git merge-base --is-ancestor HEAD upstream/master; then
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse upstream/master)" ]; then
+              git merge --ff-only upstream/master
+              git push origin master
+            else
+              echo "Zaten güncel."
+            fi
+          else
+            echo "Yerel master ana depodan ayrışmış; otomatik birleştirme yapılmadı."
+            exit 1
+          fi
