@@ -18,6 +18,12 @@ class SetFilmIzle : MainAPI() {
     override val hasQuickSearch = false
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
+    private val requestHeaders = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8"
+    )
+
     override val mainPage = mainPageOf(
         mainUrl to "Son Eklenenler",
         "${mainUrl}/tur/aile/" to "Aile",
@@ -26,18 +32,13 @@ class SetFilmIzle : MainAPI() {
         "${mainUrl}/tur/belgesel/" to "Belgesel",
         "${mainUrl}/tur/bilim-kurgu/" to "Bilim-Kurgu",
         "${mainUrl}/tur/biyografi/" to "Biyografi",
-        "${mainUrl}/tur/dini/" to "Dini",
         "${mainUrl}/tur/dram/" to "Dram",
         "${mainUrl}/tur/fantastik/" to "Fantastik",
-        "${mainUrl}/tur/genclik/" to "Gençlik",
         "${mainUrl}/tur/gerilim/" to "Gerilim",
         "${mainUrl}/tur/gizem/" to "Gizem",
         "${mainUrl}/tur/komedi/" to "Komedi",
         "${mainUrl}/tur/korku/" to "Korku",
         "${mainUrl}/tur/macera/" to "Macera",
-        "${mainUrl}/tur/mini-dizi/" to "Mini Dizi",
-        "${mainUrl}/tur/muzik/" to "Müzik",
-        "${mainUrl}/tur/program/" to "Program",
         "${mainUrl}/tur/romantik/" to "Romantik",
         "${mainUrl}/tur/savas/" to "Savaş",
         "${mainUrl}/tur/spor/" to "Spor",
@@ -49,8 +50,8 @@ class SetFilmIzle : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val baseUrl = request.data.trimEnd('/')
         val url = if (page <= 1) request.data else "$baseUrl/page/$page/"
-        val document = app.get(url).document
-        val home = document.select(".items .item, .items article, .items .item.tvshows, .items .item.movies")
+        val document = app.get(url, headers = requestHeaders, referer = mainUrl).document
+        val home = document.select(".items .item, .items article, .items .item.tvshows, .items .item.movies, .row .item, article.item")
             .mapNotNull { it.toSearchResult() }
             .distinctBy { it.url }
         return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
@@ -60,7 +61,7 @@ class SetFilmIzle : MainAPI() {
         val link = selectFirst("a[href]") ?: return null
         val href = fixUrlNull(link.attr("href")) ?: return null
         val img = selectFirst("img")
-        val title = selectFirst(".data h3, .data h2, h3, h2")?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val title = selectFirst(".data h3, .data h2, .title, h3, h2")?.text()?.trim()?.takeIf { it.isNotBlank() }
             ?: img?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
             ?: link.text().trim().takeIf { it.isNotBlank() }
             ?: return null
@@ -76,34 +77,30 @@ class SetFilmIzle : MainAPI() {
             newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        return try {
-            val mainPage = app.get(mainUrl).document
-            val nonce = Regex("""nonce:\s*['\"]([^'\"]+)['\"]""").find(mainPage.html())?.groupValues?.get(1) ?: ""
-            val search = app.post(
-                url = "${mainUrl}/wp-admin/admin-ajax.php",
-                headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
-                data = mapOf("action" to "ajax_search", "nonce" to nonce, "search" to query)
-            )
-            val html = JSONObject(search.text).optString("html")
-            if (html.isBlank()) emptyList()
-            else Jsoup.parse(html).select(".items .item, .items article, article.item, div.item")
-                .mapNotNull { it.toSearchResult() }
-                .distinctBy { it.url }
-        } catch (e: Exception) {
-            Log.e("STF", "Arama hatası", e)
-            emptyList()
-        }
+    override suspend fun search(query: String): List<SearchResponse> = try {
+        val mainPage = app.get(mainUrl, headers = requestHeaders).document
+        val nonce = Regex("""nonce:\s*['\"]([^'\"]+)['\"]""").find(mainPage.html())?.groupValues?.get(1) ?: ""
+        val search = app.post(
+            url = "${mainUrl}/wp-admin/admin-ajax.php",
+            headers = requestHeaders + mapOf("X-Requested-With" to "XMLHttpRequest", "Referer" to mainUrl),
+            data = mapOf("action" to "ajax_search", "nonce" to nonce, "search" to query)
+        )
+        val html = JSONObject(search.text).optString("html")
+        if (html.isBlank()) emptyList() else Jsoup.parse(html)
+            .select(".items .item, .items article, article.item, div.item, .row .item")
+            .mapNotNull { it.toSearchResult() }.distinctBy { it.url }
+    } catch (e: Exception) {
+        Log.e("STF", "Arama hatası", e)
+        emptyList()
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url).document
-        val title = document.selectFirst(".sheader h1, h1")?.text()?.substringBefore(" izle")?.trim() ?: return null
+        val document = app.get(url, headers = requestHeaders, referer = mainUrl).document
+        val title = document.selectFirst(".sheader h1, .title h1, h1")?.text()?.substringBefore(" izle")?.trim() ?: return null
         val poster = fixUrlNull(document.selectFirst(".sheader .poster img, .poster img, meta[property='og:image'], img")?.let { el ->
-            if (el.tagName() == "meta") el.attr("content")
-            else el.attr("data-src").takeIf(String::isNotBlank)
+            if (el.tagName() == "meta") el.attr("content") else el.attr("data-src").takeIf(String::isNotBlank)
                 ?: el.attr("data-lazy-src").takeIf(String::isNotBlank)
                 ?: el.attr("data-original").takeIf(String::isNotBlank)
                 ?: el.attr("src").takeIf(String::isNotBlank)
@@ -111,16 +108,14 @@ class SetFilmIzle : MainAPI() {
         val description = document.selectFirst(".wp-content, .sheader .wp-content, meta[property='og:description']")?.let { el ->
             if (el.tagName() == "meta") el.attr("content").trim() else el.text().trim()
         }
-        var year = document.selectFirst(".extra span.C a, .extra a[href*='/yil/'], a[href*='/yil/']")?.text()?.trim()?.toIntOrNull()
+        val year = document.selectFirst(".extra span.C a, .extra a[href*='/yil/'], a[href*='/yil/']")?.text()?.trim()?.toIntOrNull()
         val tags = document.select(".sgeneros a, .genres a").map { it.text().trim() }.filter { it.isNotBlank() }
-        var duration = document.selectFirst(".runtime, .extra .runtime")?.text()?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() }
+        val duration = document.selectFirst(".runtime, .extra .runtime")?.text()?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() }
         val recommendations = document.select(".srelacionados .item, .srelacionados article").mapNotNull { it.toRecommendationResult() }
         val actors = document.select(".cast .person, span.valor a").mapNotNull { it.text().trim().takeIf(String::isNotBlank)?.let(::Actor) }
         val trailer = Regex("""(?:youtube\.com/embed/|youtu\.be/)([A-Za-z0-9_-]+)""").find(document.html())?.groupValues?.get(1)?.let { "https://www.youtube.com/embed/$it" }
 
         if (url.contains("/dizi/")) {
-            year = document.selectFirst("a[href*='/yil/']")?.text()?.trim()?.toIntOrNull() ?: year
-            duration = document.selectFirst("#info span:containsOwn(Dakika)")?.text()?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() } ?: duration
             val episodes = document.select("#episodes ul.episodios li, .episodios li").mapNotNull {
                 val epLink = it.selectFirst("h4.episodiotitle a, .episodiotitle a, a[href]") ?: return@mapNotNull null
                 val epHref = fixUrlNull(epLink.attr("href")) ?: return@mapNotNull null
@@ -148,11 +143,11 @@ class SetFilmIzle : MainAPI() {
             addFormDataPart("player_name", playerName); addFormDataPart("part_key", partKey)
         }.build()
         return OkHttpClient().newCall(Request.Builder().url("${mainUrl}/wp-admin/admin-ajax.php").post(requestBody)
-            .addHeader("Referer", referer).addHeader("X-Requested-With", "XMLHttpRequest").build()).execute()
+            .addHeader("Referer", referer).addHeader("User-Agent", requestHeaders["User-Agent"]!!).addHeader("X-Requested-With", "XMLHttpRequest").build()).execute()
     }
 
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
-        val document = app.get(data).document
+        val document = app.get(data, headers = requestHeaders, referer = mainUrl).document
         document.select("nav.player a, .dooplay_player_option a").forEach { element ->
             val name = element.attr("data-player-name")
             val sourceId = element.attr("data-post-id")
