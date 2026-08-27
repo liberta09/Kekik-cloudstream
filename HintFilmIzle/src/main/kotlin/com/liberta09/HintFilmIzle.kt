@@ -19,6 +19,7 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Element
+import org.jsoup.nodes.Document
 import java.net.URLEncoder
 
 class HintFilmIzle : MainAPI() {
@@ -105,13 +106,13 @@ class HintFilmIzle : MainAPI() {
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
-    private fun org.jsoup.nodes.Document.metaContent(property: String): String? =
+    private fun Document.metaContent(property: String): String? =
         selectFirst("meta[property='$property'], meta[name='$property']")?.attr("content")?.trim()?.takeIf { it.isNotBlank() }
 
-    private fun org.jsoup.nodes.Document firstText(vararg selectors: String): String? =
+    private fun Document.firstText(vararg selectors: String): String? =
         selectors.asSequence().mapNotNull { selector -> selectFirst(selector)?.text()?.trim()?.takeIf { it.isNotBlank() } }.firstOrNull()
 
-    private fun org.jsoup.nodes.Document firstUrl(vararg selectors: String): String? =
+    private fun Document.firstUrl(vararg selectors: String): String? =
         selectors.asSequence().mapNotNull { selector -> selectFirst(selector)?.let { element ->
             val raw = if (element.tagName() == "meta") element.attr("content") else element.attr("data-src").ifBlank { element.attr("data-lazy-src").ifBlank { element.attr("data-original").ifBlank { element.attr("src") } } }
             fixUrlNull(raw)
@@ -132,7 +133,7 @@ class HintFilmIzle : MainAPI() {
             ".single-poster img", ".poster img", ".film img", ".movie img"
         )
 
-        val plot = firstText(
+        val plotText = firstText(
             ".description", ".plot", ".summary", ".synopsis", ".film-description", ".movie-description",
             ".entry-content p", ".entry-content", ".post-content"
         ) ?: document.metaContent("og:description") ?: document.metaContent("description")
@@ -143,9 +144,7 @@ class HintFilmIzle : MainAPI() {
             .distinct()
 
         val pageText = document.text()
-        val year = Regex("\\b(19|20)\\d{2}\\b").find(pageText)?.value?.toIntOrNull()
-        val duration = Regex("\\b(\\d{2,3})\\s*(?:dk|dakika|min|mins?)\\b", RegexOption.IGNORE_CASE).find(pageText)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        val imdb = Regex("IMDb(?: Puanı|:)??\\s*([0-9](?:[.,][0-9])?)", RegexOption.IGNORE_CASE).find(pageText)?.groupValues?.getOrNull(1)?.replace(',', '.')?.toDoubleOrNull()
+        val yearValue = Regex("\\b(19|20)\\d{2}\\b").find(pageText)?.value?.toIntOrNull()
 
         val episodes = document.select("a[href]").mapNotNull { a ->
             val text = a.text().trim()
@@ -166,18 +165,16 @@ class HintFilmIzle : MainAPI() {
         return if (looksLikeSeries) {
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 posterUrl = poster
-                plot = plot
+                plot = plotText
                 tags = genreTags
-                year = year
+                year = yearValue
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, url) {
                 posterUrl = poster
-                plot = plot
+                plot = plotText
                 tags = genreTags
-                year = year
-                if (duration != null) duration = duration
-                if (imdb != null) imdbRating = imdb
+                year = yearValue
             }
         }
     }
