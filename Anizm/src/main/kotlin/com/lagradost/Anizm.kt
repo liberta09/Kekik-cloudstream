@@ -29,6 +29,7 @@ class Anizm : MainAPI() {
 
     override val mainPage = mainPageOf(
         "$mainUrl/anime-izle?sayfa=" to "Son Eklenen Animeler",
+        "$mainUrl/kategoriler/3" to "Komedi",
         "$mainUrl/kategoriler/4" to "Dram",
         "$mainUrl/kategoriler/2" to "Aksiyon",
         "$mainUrl/kategoriler/8" to "Bilim-Kurgu",
