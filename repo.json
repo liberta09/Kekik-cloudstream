@@ -3,6 +3,6 @@
   "description": "gsrepo Türkçe CloudStream eklenti havuzu",
   "manifestVersion": 1,
   "pluginLists": [
-    "https://cdn.jsdelivr.net/gh/csprofesor/nik-cloudstream@builds/plugins.json"
+    "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/plugins.json"
   ]
 }
