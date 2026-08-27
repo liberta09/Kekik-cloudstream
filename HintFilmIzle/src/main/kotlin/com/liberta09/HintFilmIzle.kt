@@ -138,35 +138,33 @@ class HintFilmIzle : MainAPI() {
     private fun collectCandidateUrls(document: org.jsoup.nodes.Document): List<String> {
         val candidates = linkedSetOf<String>()
         val attributes = listOf("src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video", "data-embed", "data-player", "data-content", "data-href", "data-lazy-src")
-        document.select("iframe, video, source, embed, object, a, button, [role=button], [onclick]")
-            .filter { element -> element.tagName() in setOf("iframe", "video", "source", "embed", "object") || isPlayerCandidate(element) }
-            .forEach { element ->
+        document.select("iframe, video, source, embed, object, a, button, [role=button], [onclick]").forEach { element ->
+            if (element.tagName() in setOf("iframe", "video", "source", "embed", "object") || isPlayerCandidate(element)) {
                 attributes.forEach { attribute ->
                     val fixed = fixUrlNull(element.attr(attribute).trim())
-                    if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
+                    if (fixed != null && (fixed.startsWith("http://") || fixed.startsWith("https://"))) candidates += fixed
                 }
                 Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(element.attr("onclick")).forEach { match ->
-                    val fixed = fixUrlNull(match.value)
-                    if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
+                    fixUrlNull(match.value)?.let { candidates += it }
                 }
             }
-        document.select("script").filter { it.data().contains(Regex("tekpart|player|embed|m3u8|mp4", RegexOption.IGNORE_CASE)) }.forEach { script ->
+        }
+        document.select("script").forEach { script ->
             Regex("https?://[^\\\"'\\s<>]+", RegexOption.IGNORE_CASE).findAll(script.data()).forEach { match ->
-                val fixed = fixUrlNull(match.value)
-                if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
+                fixUrlNull(match.value)?.let { candidates += it }
             }
         }
-        return candidates.toList()
+        val (primary, trailers) = candidates.partition { !isTrailerHost(it) }
+        return primary + trailers
     }
 
     private suspend fun tryExtractor(url: String, referer: String, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
-        if (isTrailerHost(url)) return false
         var found = false
         runCatching { loadExtractor(url, referer, subtitleCallback, callback); found = true }
         runCatching {
             val child = app.get(url, referer = referer).document
             collectCandidateUrls(child).forEach { nested ->
-                if (!isTrailerHost(nested)) runCatching { loadExtractor(nested, url, subtitleCallback, callback); found = true }
+                runCatching { loadExtractor(nested, url, subtitleCallback, callback); found = true }
             }
         }
         return found
@@ -176,13 +174,6 @@ class HintFilmIzle : MainAPI() {
         val document = runCatching { app.get(data).document }.getOrNull() ?: return false
         var found = false
         collectCandidateUrls(document).forEach { candidate -> if (tryExtractor(candidate, data, subtitleCallback, callback)) found = true }
-        if (!found) {
-            document.select("a, button, [role=button], [onclick]").filter { isPlayerCandidate(it) }.forEach { button ->
-                Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(button.attr("onclick")).forEach { match ->
-                    if (tryExtractor(match.value, data, subtitleCallback, callback)) found = true
-                }
-            }
-        }
         return found
     }
 }
