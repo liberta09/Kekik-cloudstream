@@ -620,7 +620,7 @@
       "liberta09"
     ],
     "description": "HintFilmİzle.com için Hint film ve dizi eklentisi",
-    "fileSize": 24340,
+    "fileSize": 20659,
     "repositoryUrl": "https://github.com/liberta09/Kekik-cloudstream",
     "language": "tr",
     "tvTypes": [
@@ -629,7 +629,7 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=hintfilmizle.com&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-6af65c728e7fdf01b005f168f830657fcfb12dfc0d0282469a3098007056ba61"
+    "fileHash": "sha256-c48def9b4f461db0db13f411823ddfcac089e8b444301f9ae1a283c06ac0cc72"
   },
   {
     "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/InatBox.cs3",
