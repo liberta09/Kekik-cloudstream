@@ -1,3 +1,4 @@
+# Build workflow trigger: 2026-08-28
 name: CloudStream Derleyici
 
 concurrency:
