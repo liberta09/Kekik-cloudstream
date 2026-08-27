@@ -9,3 +9,5 @@ _CloudStream için Türkçe yayın yapan sitelere ait eklentiler_
 HintFilmIzle oynatıcı güncellemesi.
 
 Build tetikleyici kontrolü.
+
+HintFilmIzle v12 build tetikleyicisi.
