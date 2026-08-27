@@ -7,3 +7,5 @@ _CloudStream için Türkçe yayın yapan sitelere ait eklentiler_
 ## Son derleme tetikleyicisi
 
 HintFilmIzle oynatıcı güncellemesi.
+
+Build tetikleyici kontrolü.
