@@ -1,15 +1,9 @@
-# Build workflow trigger: 2026-08-28 00:40
 name: CloudStream Derleyici
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - master
+    branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -51,53 +45,6 @@ jobs:
         working-directory: src
         run: |
           sed -i 's/\.filter { it\.isNotBlank() }/.filterNotNull().filter { it.isNotBlank() }/' DiziGom/src/main/kotlin/com/nikyokki/DiziGom.kt
-
-      - name: HintFilmIzle trailer filtreleme
-        working-directory: src
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('HintFilmIzle/src/main/kotlin/com/liberta09/HintFilmIzle.kt')
-          s = p.read_text(encoding='utf-8')
-          marker = '    private fun collectCandidateUrls'
-          if marker in s:
-              start = s.index(marker)
-              replacement = '''    private fun isTrailerHost(url: String): Boolean {
-          val lower = url.lowercase()
-          return lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("vimeo.com") ||
-              lower.contains("facebook.com") || lower.contains("twitter.com")
-      }
-
-      private fun collectCandidateUrls(document: org.jsoup.nodes.Document): List<String> {
-          val candidates = linkedSetOf<String>()
-          val attributes = listOf("src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video", "data-embed", "data-player", "data-content", "data-href", "data-lazy-src")
-          document.select("a, button, [role=button], [onclick], iframe, video, source, embed, object").forEach { element ->
-              val marker = listOf(element.text(), element.attr("class"), element.attr("id"), element.attr("data-player"), element.attr("data-embed"), element.attr("data-video")).joinToString(" ").lowercase()
-              val relevant = element.tagName() in setOf("iframe", "video", "source", "embed", "object") || marker.contains("tekpart") || marker.contains("player") || marker.contains("embed") || marker.contains("part") || marker.contains("video")
-              if (!relevant) return@forEach
-              attributes.forEach { attribute ->
-                  val fixed = fixUrlNull(element.attr(attribute).trim())
-                  if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
-              }
-              Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(element.attr("onclick")).forEach { match ->
-                  val fixed = fixUrlNull(match.value)
-                  if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
-              }
-          }
-          return candidates.toList()
-      }
-
-      override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
-          val document = runCatching { app.get(data).document }.getOrNull() ?: return false
-          var found = false
-          collectCandidateUrls(document).forEach { candidate ->
-              runCatching { loadExtractor(candidate, data, subtitleCallback, callback); found = true }
-          }
-          return found
-      }
-'''
-              p.write_text(s[:start] + replacement + '\n}\n', encoding='utf-8')
-          PY
 
       - name: Eklentileri derle
         working-directory: src
