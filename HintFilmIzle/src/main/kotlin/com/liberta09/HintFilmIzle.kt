@@ -198,14 +198,14 @@ class HintFilmIzle : MainAPI() {
         return if (isSeries) {
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 posterUrl = poster
-                plot = plot
+                this.plot = plot
                 this.tags = tags
                 this.year = year
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, url) {
                 posterUrl = poster
-                plot = plot
+                this.plot = plot
                 this.tags = tags
                 this.year = year
             }
@@ -216,7 +216,7 @@ class HintFilmIzle : MainAPI() {
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (com.lagradost.cloudstream3.ExtractorLink) -> Unit
+        callback: (com.lagradost.cloudstream3.utils.ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data).document
         val frames = document.select(
