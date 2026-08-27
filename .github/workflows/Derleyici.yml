@@ -1,4 +1,4 @@
-# Build workflow trigger: 2026-08-28
+# Build workflow trigger: 2026-08-28 00:40
 name: CloudStream Derleyici
 
 concurrency:
@@ -60,8 +60,9 @@ jobs:
           p = Path('HintFilmIzle/src/main/kotlin/com/liberta09/HintFilmIzle.kt')
           s = p.read_text(encoding='utf-8')
           marker = '    private fun collectCandidateUrls'
-          start = s.index(marker)
-          replacement = '''    private fun isTrailerHost(url: String): Boolean {
+          if marker in s:
+              start = s.index(marker)
+              replacement = '''    private fun isTrailerHost(url: String): Boolean {
           val lower = url.lowercase()
           return lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("vimeo.com") ||
               lower.contains("facebook.com") || lower.contains("twitter.com")
@@ -69,35 +70,16 @@ jobs:
 
       private fun collectCandidateUrls(document: org.jsoup.nodes.Document): List<String> {
           val candidates = linkedSetOf<String>()
-          val attributes = listOf(
-              "src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video",
-              "data-embed", "data-player", "data-content", "data-href", "data-lazy-src"
-          )
-          document.select("a, button, [role=button], [onclick], iframe, video, source, embed, object")
-              .filter { element ->
-                  val marker = listOf(
-                      element.text(), element.attr("class"), element.attr("id"),
-                      element.attr("data-player"), element.attr("data-embed"), element.attr("data-video")
-                  ).joinToString(" ").lowercase()
-                  element.tagName() in setOf("iframe", "video", "source", "embed", "object") ||
-                      marker.contains("tekpart") || marker.contains("player") || marker.contains("embed") ||
-                      marker.contains("part") || marker.contains("video")
+          val attributes = listOf("src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video", "data-embed", "data-player", "data-content", "data-href", "data-lazy-src")
+          document.select("a, button, [role=button], [onclick], iframe, video, source, embed, object").forEach { element ->
+              val marker = listOf(element.text(), element.attr("class"), element.attr("id"), element.attr("data-player"), element.attr("data-embed"), element.attr("data-video")).joinToString(" ").lowercase()
+              val relevant = element.tagName() in setOf("iframe", "video", "source", "embed", "object") || marker.contains("tekpart") || marker.contains("player") || marker.contains("embed") || marker.contains("part") || marker.contains("video")
+              if (!relevant) return@forEach
+              attributes.forEach { attribute ->
+                  val fixed = fixUrlNull(element.attr(attribute).trim())
+                  if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
               }
-              .forEach { element ->
-                  attributes.forEach { attribute ->
-                      val fixed = fixUrlNull(element.attr(attribute).trim())
-                      if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
-                  }
-                  val onclick = element.attr("onclick")
-                  Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(onclick).forEach { match ->
-                      val fixed = fixUrlNull(match.value)
-                      if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
-                  }
-              }
-          document.select("script").filter { script ->
-              script.data().contains(Regex("tekpart|player|embed|m3u8|mp4", RegexOption.IGNORE_CASE))
-          }.forEach { script ->
-              Regex("https?://[^\\\"'\\s<>]+", RegexOption.IGNORE_CASE).findAll(script.data()).forEach { match ->
+              Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(element.attr("onclick")).forEach { match ->
                   val fixed = fixUrlNull(match.value)
                   if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
               }
@@ -105,44 +87,16 @@ jobs:
           return candidates.toList()
       }
 
-      private suspend fun tryExtractor(
-          url: String,
-          referer: String,
-          subtitleCallback: (SubtitleFile) -> Unit,
-          callback: (ExtractorLink) -> Unit
-      ): Boolean {
-          var found = false
-          runCatching {
-              loadExtractor(url, referer, subtitleCallback, callback)
-              found = true
-          }
-          runCatching {
-              val child = app.get(url, referer = referer).document
-              collectCandidateUrls(child).forEach { nested ->
-                  runCatching {
-                      loadExtractor(nested, url, subtitleCallback, callback)
-                      found = true
-                  }
-              }
-          }
-          return found
-      }
-
-      override suspend fun loadLinks(
-          data: String,
-          isCasting: Boolean,
-          subtitleCallback: (SubtitleFile) -> Unit,
-          callback: (ExtractorLink) -> Unit
-      ): Boolean {
+      override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
           val document = runCatching { app.get(data).document }.getOrNull() ?: return false
           var found = false
           collectCandidateUrls(document).forEach { candidate ->
-              if (tryExtractor(candidate, data, subtitleCallback, callback)) found = true
+              runCatching { loadExtractor(candidate, data, subtitleCallback, callback); found = true }
           }
           return found
       }
 '''
-          p.write_text(s[:start] + replacement + '\n}\n', encoding='utf-8')
+              p.write_text(s[:start] + replacement + '\n}\n', encoding='utf-8')
           PY
 
       - name: Eklentileri derle
