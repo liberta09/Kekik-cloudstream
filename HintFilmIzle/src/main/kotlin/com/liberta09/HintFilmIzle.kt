@@ -45,9 +45,7 @@ class HintFilmIzle : MainAPI() {
         var current: Element? = this
         repeat(6) {
             val value = current
-            if (value != null && value.selectFirst("img") != null && value.selectFirst("a[href]") != null) {
-                return value
-            }
+            if (value != null && value.selectFirst("img") != null && value.selectFirst("a[href]") != null) return value
             current = current?.parent()
         }
         return this
@@ -58,61 +56,43 @@ class HintFilmIzle : MainAPI() {
         val link = if (tagName() == "a") this else container.selectFirst("a[href]") ?: return null
         val href = fixUrlNull(link.attr("href").trim()) ?: return null
         if (!href.startsWith(mainUrl)) return null
-
         val path = href.removePrefix(mainUrl).substringBefore("?").removeSuffix("/")
         if (path.isBlank() || path == "/film" || path == "/film-izle" || path == "/trendler" || path.startsWith("/tur/") || path.startsWith("/kategori/") || path.startsWith("/koleksiyon/")) return null
-
         val title = listOf(
             container.selectFirst("h1,h2,h3,h4,h5,.title,.name,.film-name,.movie-title")?.text(),
             container.selectFirst("img")?.attr("alt"),
             link.attr("title"),
             link.text()
         ).firstOrNull { !it.isNullOrBlank() }?.trim() ?: return null
-
         val poster = container.selectFirst("img")?.let { image ->
-            fixUrlNull(
-                image.attr("data-src").ifBlank {
-                    image.attr("data-lazy-src").ifBlank {
-                        image.attr("data-original").ifBlank { image.attr("src") }
-                    }
+            fixUrlNull(image.attr("data-src").ifBlank {
+                image.attr("data-lazy-src").ifBlank {
+                    image.attr("data-original").ifBlank { image.attr("src") }
                 }
-            )
+            })
         }
-
-        return newMovieSearchResponse(title, href, TvType.Movie) {
-            posterUrl = poster
-        }
+        return newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val pageUrl = if (page <= 1) request.data else "${request.data.removeSuffix("/")}/page/$page"
         val document = app.get(pageUrl).document
         val results = document.select("article, .film-box, .movie-item, .poster, .movie, .film, .item, li")
-            .mapNotNull { it.toSearchResult() }
-            .distinctBy { it.url }
-            .take(60)
+            .mapNotNull { it.toSearchResult() }.distinctBy { it.url }.take(60)
         val hasNext = document.selectFirst("a.next, a[rel=next], .pagination a.next, .pagination .next") != null || results.size >= 10
         return newHomePageResponse(request.name, results, hasNext = hasNext)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val urls = listOf(
-            "$mainUrl/?s=$encoded",
-            "$mainUrl/film?s=$encoded",
-            "$mainUrl/film-izle?s=$encoded"
-        )
-
+        val urls = listOf("$mainUrl/?s=$encoded", "$mainUrl/film?s=$encoded", "$mainUrl/film-izle?s=$encoded")
         for (searchUrl in urls) {
             val results = runCatching {
-                app.get(searchUrl).document
-                    .select("article, .film-box, .movie-item, .poster, .movie, .film, .item, li")
-                    .mapNotNull { it.toSearchResult() }
-                    .distinctBy { it.url }
+                app.get(searchUrl).document.select("article, .film-box, .movie-item, .poster, .movie, .film, .item, li")
+                    .mapNotNull { it.toSearchResult() }.distinctBy { it.url }
             }.getOrNull().orEmpty()
             if (results.isNotEmpty()) return results
         }
-
         return emptyList()
     }
 
@@ -124,149 +104,85 @@ class HintFilmIzle : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val document = runCatching { app.get(url).document }.getOrNull() ?: return null
         val pageText = document.text().replace(Regex("\\s+"), " ").trim()
-
         val title = document.selectFirst("h1")?.text()?.trim()?.takeIf { it.isNotBlank() }
             ?: valueFromMeta(document, "meta[property='og:title']")
             ?: document.title().substringBefore("|").trim().takeIf { it.isNotBlank() }
             ?: url.substringAfterLast("/").substringBefore("-izle").replace('-', ' ')
-
         val poster = valueFromMeta(document, "meta[property='og:image']")?.let(::fixUrlNull)
-            ?: document.selectFirst("img")?.let { image ->
-                fixUrlNull(
-                    image.attr("data-src").ifBlank {
-                        image.attr("data-lazy-src").ifBlank {
-                            image.attr("data-original").ifBlank { image.attr("src") }
-                        }
-                    }
-                )
-            }
-
+            ?: document.selectFirst("img")?.let { image -> fixUrlNull(image.attr("data-src").ifBlank {
+                image.attr("data-lazy-src").ifBlank { image.attr("data-original").ifBlank { image.attr("src") } }
+            }) }
         val plot = document.select("p").map { it.text().trim() }
-            .filter { it.length >= 60 && !it.contains("Hint Film izleme sitemizde", true) }
-            .maxByOrNull { it.length }
+            .filter { it.length >= 60 && !it.contains("Hint Film izleme sitemizde", true) }.maxByOrNull { it.length }
             ?: valueFromMeta(document, "meta[name='description']")
             ?: valueFromMeta(document, "meta[property='og:description']")
-
-        val tags = document.select("a[href*='/tur/']")
-            .map { it.text().trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
+        val tags = document.select("a[href*='/tur/']").map { it.text().trim() }.filter { it.isNotBlank() }.distinct()
         val isSeries = pageText.contains("bölüm", true) || pageText.contains("sezon", true) || url.contains("/dizi/")
-
         return newMovieLoadResponse(title, url, if (isSeries) TvType.TvSeries else TvType.Movie, url) {
-            this.posterUrl = poster
-            this.plot = plot
-            this.tags = tags
+            this.posterUrl = poster; this.plot = plot; this.tags = tags
         }
     }
 
     private fun isTrailerHost(url: String): Boolean {
         val lower = url.lowercase()
         return lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("youtube-nocookie.com") ||
-            lower.contains("vimeo.com") || lower.contains("facebook.com") || lower.contains("twitter.com") ||
-            lower.contains("x.com")
+            lower.contains("vimeo.com") || lower.contains("facebook.com") || lower.contains("twitter.com") || lower.contains("x.com")
     }
 
     private fun isPlayerCandidate(element: Element): Boolean {
-        val marker = listOf(
-            element.text(),
-            element.attr("class"),
-            element.attr("id"),
-            element.attr("data-player"),
-            element.attr("data-embed"),
-            element.attr("data-video"),
-            element.attr("onclick")
-        ).joinToString(" ").lowercase()
-        return marker.contains("tekpart") || marker.contains("player") || marker.contains("embed") ||
-            marker.contains("video") || marker.contains("part")
+        val marker = listOf(element.text(), element.attr("class"), element.attr("id"), element.attr("data-player"),
+            element.attr("data-embed"), element.attr("data-video"), element.attr("onclick")).joinToString(" ").lowercase()
+        return marker.contains("tekpart") || marker.contains("player") || marker.contains("embed") || marker.contains("video") || marker.contains("part")
     }
 
     private fun collectCandidateUrls(document: org.jsoup.nodes.Document): List<String> {
         val candidates = linkedSetOf<String>()
-        val attributes = listOf(
-            "src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video",
-            "data-embed", "data-player", "data-content", "data-href", "data-lazy-src"
-        )
-
+        val attributes = listOf("src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video", "data-embed", "data-player", "data-content", "data-href", "data-lazy-src")
         document.select("iframe, video, source, embed, object, a, button, [role=button], [onclick]")
-            .filter { element ->
-                element.tagName() in setOf("iframe", "video", "source", "embed", "object") || isPlayerCandidate(element)
-            }
+            .filter { element -> element.tagName() in setOf("iframe", "video", "source", "embed", "object") || isPlayerCandidate(element) }
             .forEach { element ->
                 attributes.forEach { attribute ->
                     val fixed = fixUrlNull(element.attr(attribute).trim())
                     if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
                 }
-                val onclick = element.attr("onclick")
-                Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(onclick).forEach { match ->
+                Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(element.attr("onclick")).forEach { match ->
                     val fixed = fixUrlNull(match.value)
                     if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
                 }
             }
-
-        document.select("script").filter { script ->
-            script.data().contains(Regex("tekpart|player|embed|m3u8|mp4", RegexOption.IGNORE_CASE))
-        }.forEach { script ->
+        document.select("script").filter { it.data().contains(Regex("tekpart|player|embed|m3u8|mp4", RegexOption.IGNORE_CASE)) }.forEach { script ->
             Regex("https?://[^\\\"'\\s<>]+", RegexOption.IGNORE_CASE).findAll(script.data()).forEach { match ->
                 val fixed = fixUrlNull(match.value)
                 if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
             }
         }
-
         return candidates.toList()
     }
 
-    private suspend fun tryExtractor(
-        url: String,
-        referer: String,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
+    private suspend fun tryExtractor(url: String, referer: String, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         if (isTrailerHost(url)) return false
         var found = false
-        runCatching {
-            loadExtractor(url, referer, subtitleCallback, callback)
-            found = true
-        }
+        runCatching { loadExtractor(url, referer, subtitleCallback, callback); found = true }
         runCatching {
             val child = app.get(url, referer = referer).document
             collectCandidateUrls(child).forEach { nested ->
-                if (!isTrailerHost(nested)) {
-                    runCatching {
-                        loadExtractor(nested, url, subtitleCallback, callback)
-                        found = true
-                    }
-                }
+                if (!isTrailerHost(nested)) runCatching { loadExtractor(nested, url, subtitleCallback, callback); found = true }
             }
         }
         return found
     }
 
-    override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
+    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         val document = runCatching { app.get(data).document }.getOrNull() ?: return false
         var found = false
-
-        collectCandidateUrls(document).forEach { candidate ->
-            if (tryExtractor(candidate, data, subtitleCallback, callback)) found = true
-        }
-
+        collectCandidateUrls(document).forEach { candidate -> if (tryExtractor(candidate, data, subtitleCallback, callback)) found = true }
         if (!found) {
-            document.select("a, button, [role=button], [onclick]")
-                .filter { isPlayerCandidate(it) }
-                .forEach { button ->
-                    val onclick = button.attr("onclick")
-                    Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(onclick).forEach { match ->
-                        if (tryExtractor(match.value, data, subtitleCallback, callback)) found = true
-                    }
+            document.select("a, button, [role=button], [onclick]").filter { isPlayerCandidate(it) }.forEach { button ->
+                Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(button.attr("onclick")).forEach { match ->
+                    if (tryExtractor(match.value, data, subtitleCallback, callback)) found = true
                 }
+            }
         }
-
         return found
     }
 }
