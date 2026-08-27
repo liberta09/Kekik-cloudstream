@@ -1,0 +1,22 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/HintFilmIzle.cs3",
+    "status": 1,
+    "version": 2,
+    "name": "HintFilmİzle",
+    "internalName": "HintFilmIzle",
+    "authors": [
+      "liberta09"
+    ],
+    "description": "HintFilmİzle.com için Hint film ve dizi eklentisi",
+    "fileSize": 16181,
+    "repositoryUrl": "https://github.com/liberta09/Kekik-cloudstream",
+    "language": "tr",
+    "tvTypes": [
+      "Movie",
+      "TvSeries"
+    ],
+    "iconUrl": "https://www.google.com/s2/favicons?domain=hintfilmizle.com&sz=%size%",
+    "apiVersion": 1
+  }
+]
