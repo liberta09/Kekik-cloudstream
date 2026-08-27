@@ -116,12 +116,10 @@ class HintFilmIzle : MainAPI() {
         val title = document.selectFirst("h1")?.text()?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: document.selectFirst("meta[property='og:title']")?.attr("content")?.trim()
-            ?: document.title().substringBefore("|").trim()
-            .takeIf { it.isNotBlank() }
+            ?: document.title().substringBefore("|").trim().takeIf { it.isNotBlank() }
             ?: url.substringAfterLast("/").substringBefore("-izle").replace('-', ' ').replaceFirstChar { it.uppercase() }
 
-        val poster = document.selectFirst("meta[property='og:image'], meta[name='twitter:image']")?.attr("content")
-            ?.let(::fixUrlNull)
+        val poster = document.selectFirst("meta[property='og:image'], meta[name='twitter:image']")?.attr("content")?.let(::fixUrlNull)
             ?: document.selectFirst("img")?.let { img ->
                 fixUrlNull(img.attr("data-src").ifBlank { img.attr("data-lazy-src").ifBlank { img.attr("data-original").ifBlank { img.attr("src") } } })
             }
@@ -131,12 +129,6 @@ class HintFilmIzle : MainAPI() {
                 .filter { it.length >= 80 && !it.contains("Hint Film izleme sitemizde", true) }
                 .maxByOrNull { it.length }
             ?: document.selectFirst("meta[name='description'], meta[property='og:description']")?.attr("content")?.trim()
-
-        val year = extractValue(pageText, "Yapım Yılı\\s*((?:19|20)\\d{2})")?.toIntOrNull()
-            ?: Regex("\\b((?:19|20)\\d{2})\\b").find(pageText)?.groupValues?.getOrNull(1)?.toIntOrNull()
-
-        val duration = extractValue(pageText, "Süre\\s*(\\d{2,3})\\s*(?:dk|dakika)")?.toIntOrNull()
-        val imdb = extractValue(pageText, "IMDb Puanı\\s*([0-9]+(?:[.,][0-9]+)?)")?.replace(',', '.')?.toDoubleOrNull()
 
         val tags = document.select("a[href*='/tur/']")
             .map { it.text().trim() }
@@ -164,18 +156,12 @@ class HintFilmIzle : MainAPI() {
                 posterUrl = poster
                 plot = plot
                 tags = tags
-                year = year
-                if (duration != null) duration = duration
-                if (imdb != null) imdbRating = imdb
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, url) {
                 posterUrl = poster
                 plot = plot
                 tags = tags
-                year = year
-                if (duration != null) duration = duration
-                if (imdb != null) imdbRating = imdb
             }
         }
     }
@@ -192,9 +178,7 @@ class HintFilmIzle : MainAPI() {
                 .mapNotNull { element ->
                     val value = element.attr("src").ifBlank {
                         element.attr("data-src").ifBlank {
-                            element.attr("data-lazy-src").ifBlank {
-                                element.attr("data-url")
-                            }
+                            element.attr("data-lazy-src").ifBlank { element.attr("data-url") }
                         }
                     }
                     fixUrlNull(value)
@@ -223,9 +207,7 @@ class HintFilmIzle : MainAPI() {
         ).mapNotNull { element ->
             val value = element.attr("src").ifBlank {
                 element.attr("data-src").ifBlank {
-                    element.attr("data-lazy-src").ifBlank {
-                        element.attr("data-url")
-                    }
+                    element.attr("data-lazy-src").ifBlank { element.attr("data-url") }
                 }
             }
             fixUrlNull(value)
