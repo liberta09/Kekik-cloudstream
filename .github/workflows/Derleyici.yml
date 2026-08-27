@@ -31,8 +31,7 @@ jobs:
           ref: builds
           path: builds
           fetch-depth: 0
-          persist-credentials: true
-          token: ${{ github.token }}
+          persist-credentials: false
 
       - name: Eski derlemeleri temizle
         run: rm -f "$GITHUB_WORKSPACE/builds"/*.cs3 "$GITHUB_WORKSPACE/builds/plugins.json"
@@ -74,7 +73,6 @@ jobs:
               "src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video",
               "data-embed", "data-player", "data-content", "data-href", "data-lazy-src"
           )
-
           document.select("a, button, [role=button], [onclick], iframe, video, source, embed, object")
               .filter { element ->
                   val marker = listOf(
@@ -96,7 +94,6 @@ jobs:
                       if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
                   }
               }
-
           document.select("script").filter { script ->
               script.data().contains(Regex("tekpart|player|embed|m3u8|mp4", RegexOption.IGNORE_CASE))
           }.forEach { script ->
@@ -105,7 +102,6 @@ jobs:
                   if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
               }
           }
-
           return candidates.toList()
       }
 
