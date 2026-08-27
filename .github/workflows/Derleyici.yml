@@ -53,6 +53,11 @@ jobs:
         with:
           cache-read-only: false
 
+      - name: DiziGom nullability düzeltmesi
+        working-directory: src
+        run: |
+          sed -i 's/\.filter { it\.isNotBlank() }/.filterNotNull().filter { it.isNotBlank() }/' DiziGom/src/main/kotlin/com/nikyokki/DiziGom.kt
+
       - name: Eklentileri derle
         working-directory: src
         run: |
