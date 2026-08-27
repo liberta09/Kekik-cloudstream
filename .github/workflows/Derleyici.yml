@@ -46,21 +46,6 @@ jobs:
         run: |
           sed -i 's/\.filter { it\.isNotBlank() }/.filterNotNull().filter { it.isNotBlank() }/' DiziGom/src/main/kotlin/com/nikyokki/DiziGom.kt
 
-      - name: HintFilmIzle player kaynaklarını düzelt
-        working-directory: src
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('HintFilmIzle/src/main/kotlin/com/liberta09/HintFilmIzle.kt')
-          s = p.read_text(encoding='utf-8')
-          s = s.replace('"data-content", "data-href", "data-lazy-src", "value")', '"data-content", "data-href", "data-lazy-src", "data-litespeed-src", "srcdoc", "value")')
-          s = s.replace('if (fixed != null && !isTrailerHost(fixed)) candidates += fixed', 'if (fixed != null && !fixed.equals(mainUrl) && !isTrailerHost(fixed)) candidates += fixed')
-          s = s.replace('Regex("https?://[^\\\\\"\'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(element.attr("onclick"))', 'Regex("(?:https?://[^\\\\\"\'()\\s<>]+|/[^\\\\\"\'()\\s<>]+)", RegexOption.IGNORE_CASE).findAll(element.attr("onclick"))')
-          s = s.replace('Regex("https?://[^\\\\\"\'\\s<>]+", RegexOption.IGNORE_CASE).findAll(script.data())', 'Regex("(?:https?://[^\\\\\"\'\\s<>]+|/[^\\\\\"\'\\s<>]+)", RegexOption.IGNORE_CASE).findAll(script.data())')
-          p.write_text(s, encoding='utf-8')
-          PY
-          sed -i 's/^version = 12$/version = 13/' HintFilmIzle/build.gradle.kts
-
       - name: Eklentileri derle
         working-directory: src
         run: |
