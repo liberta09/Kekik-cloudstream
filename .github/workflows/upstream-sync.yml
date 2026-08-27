@@ -42,6 +42,23 @@ jobs:
           shopt -s dotglob
           cp -a /tmp/nik/. .
 
+          # Anizm Komedi kategorisini hedef repoda kalıcı tut.
+          if [ -f "Anizm/src/main/kotlin/com/lagradost/Anizm.kt" ]; then
+            python3 - <<'PY'
+from pathlib import Path
+p = Path("Anizm/src/main/kotlin/com/lagradost/Anizm.kt")
+s = p.read_text(encoding="utf-8")
+line = '        "$mainUrl/kategoriler/3" to "Komedi",\n'
+if '"$mainUrl/kategoriler/3" to "Komedi"' not in s:
+    marker = '    override val mainPage = mainPageOf(\n'
+    start = s.find(marker)
+    if start != -1:
+        insert_at = s.find('\n', start + len(marker)) + 1
+        s = s[:insert_at] + line + s[insert_at:]
+        p.write_text(s, encoding="utf-8")
+PY
+          fi
+
           # Senkronize edilen upstream workflow'larını at; hedef repodaki
           # workflow'ları olduğu gibi geri koy.
           rm -rf .github/workflows
