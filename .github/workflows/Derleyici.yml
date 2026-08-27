@@ -58,48 +58,6 @@ jobs:
         run: |
           sed -i 's/\.filter { it\.isNotBlank() }/.filterNotNull().filter { it.isNotBlank() }/' DiziGom/src/main/kotlin/com/nikyokki/DiziGom.kt
 
-      - name: Anizm Komedi kategorisini düzelt
-        working-directory: src
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("Anizm/src/main/kotlin/com/lagradost/Anizm.kt")
-          s = p.read_text(encoding="utf-8")
-          old = '''        val home = if (request.data.contains("/kategoriler/")) {
-            val heading = document.select("h1, h2, h3, h4")
-                .firstOrNull { it.text().contains("Kategorisindeki Animeler", ignoreCase = true) }
-
-            val categoryContainer = generateSequence(heading?.parent()) { it.parent() }
-                .take(8)
-                .firstOrNull { container ->
-                    container.select("a[href]").count { anchor ->
-                        val href = fixUrl(anchor.attr("href").trim())
-                        val text = anchor.text().trim()
-                        href.startsWith(mainUrl) &&
-                            !href.contains("/kategoriler/") &&
-                            !href.contains("/anime-izle") &&
-                            text.length > 2 &&
-                            !text.equals("İzle", ignoreCase = true)
-                    } >= 5
-                }
-
-            categoryContainer
-                ?.select("a[href]")
-                ?.mapNotNull { it.toSearchResult() }
-                ?.distinctBy { it.url }
-                .orEmpty()
-        } else {'''
-          new = '''        val home = if (request.data.contains("/kategoriler/")) {
-            document.select("a[href]")
-                .mapNotNull { it.toSearchResult() }
-                .distinctBy { it.url }
-        } else {'''
-          if old not in s:
-              raise SystemExit("Anizm category block not found")
-          s = s.replace(old, new, 1)
-          p.write_text(s, encoding="utf-8")
-          PY
-
       - name: Eklentileri derle
         working-directory: src
         run: |
