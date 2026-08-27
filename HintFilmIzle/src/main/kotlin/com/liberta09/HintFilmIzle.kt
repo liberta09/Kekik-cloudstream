@@ -10,12 +10,9 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.fixUrlNull
 import com.lagradost.cloudstream3.mainPageOf
-import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
-import com.lagradost.cloudstream3.newTvSeriesLoadResponse
-import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Element
@@ -24,8 +21,8 @@ import java.net.URLEncoder
 class HintFilmIzle : MainAPI() {
     override var mainUrl = "https://www.hintfilmizle.com"
     override var name = "HintFilmIzle"
-    override val hasMainPage = true
     override var lang = "tr"
+    override val hasMainPage = true
     override val hasQuickSearch = true
     override val hasChromecastSupport = true
     override val hasDownloadSupport = true
@@ -44,10 +41,53 @@ class HintFilmIzle : MainAPI() {
         "$mainUrl/tur/bilim-kurgu-filmleri" to "Bilim Kurgu"
     )
 
+    private fun Element.card(): Element {
+        var current: Element? = this
+        repeat(6) {
+            val value = current
+            if (value != null && value.selectFirst("img") != null && value.selectFirst("a[href]") != null) {
+                return value
+            }
+            current = current?.parent()
+        }
+        return this
+    }
+
+    private fun Element.toSearchResult(): SearchResponse? {
+        val container = card()
+        val link = if (tagName() == "a") this else container.selectFirst("a[href]") ?: return null
+        val href = fixUrlNull(link.attr("href").trim()) ?: return null
+        if (!href.startsWith(mainUrl)) return null
+
+        val path = href.removePrefix(mainUrl).substringBefore("?").removeSuffix("/")
+        if (path.isBlank() || path == "/film" || path == "/film-izle" || path == "/trendler" || path.startsWith("/tur/") || path.startsWith("/kategori/") || path.startsWith("/koleksiyon/")) return null
+
+        val title = listOf(
+            container.selectFirst("h1,h2,h3,h4,h5,.title,.name,.film-name,.movie-title")?.text(),
+            container.selectFirst("img")?.attr("alt"),
+            link.attr("title"),
+            link.text()
+        ).firstOrNull { !it.isNullOrBlank() }?.trim() ?: return null
+
+        val poster = container.selectFirst("img")?.let { image ->
+            fixUrlNull(
+                image.attr("data-src").ifBlank {
+                    image.attr("data-lazy-src").ifBlank {
+                        image.attr("data-original").ifBlank { image.attr("src") }
+                    }
+                }
+            )
+        }
+
+        return newMovieSearchResponse(title, href, TvType.Movie) {
+            posterUrl = poster
+        }
+    }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val pageUrl = if (page <= 1) request.data else "${request.data.removeSuffix("/")}/page/$page"
         val document = app.get(pageUrl).document
-        val results = document.select("article, .film-box, .movie-item, .poster, .movie, .film, .item")
+        val results = document.select("article, .film-box, .movie-item, .poster, .movie, .film, .item, li")
             .mapNotNull { it.toSearchResult() }
             .distinctBy { it.url }
             .take(60)
@@ -55,150 +95,118 @@ class HintFilmIzle : MainAPI() {
         return newHomePageResponse(request.name, results, hasNext = hasNext)
     }
 
-    private fun Element.findCard(): Element {
-        var current: Element? = this
-        repeat(5) {
-            if (current?.selectFirst("img") != null && current.select("a[href]").isNotEmpty()) return current!!
-            current = current?.parent()
-        }
-        return this
-    }
-
-    private fun Element.toSearchResult(): SearchResponse? {
-        val card = findCard()
-        val anchor = if (tagName() == "a") this else card.selectFirst("a[href]") ?: return null
-        val href = fixUrlNull(anchor.attr("href").trim()) ?: return null
-        if (!href.startsWith(mainUrl)) return null
-
-        val path = href.removePrefix(mainUrl).substringBefore("?").removeSuffix("/")
-        if (path.isBlank() || path == "/film" || path == "/film-izle" || path == "/trendler" || path.startsWith("/tur/") || path.startsWith("/kategori") || path.startsWith("/koleksiyon")) return null
-
-        val cardTitle = listOf(
-            card.selectFirst("h1,h2,h3,h4,h5,.title,.name,.film-name,.movie-title")?.text(),
-            card.selectFirst("img")?.attr("alt"),
-            anchor.attr("title"),
-            anchor.text()
-        ).firstOrNull { !it.isNullOrBlank() && it.trim().length > 1 }?.trim() ?: return null
-
-        val posterUrl = fixUrlNull(card.selectFirst("img")?.let { image ->
-            image.attr("data-src").ifBlank {
-                image.attr("data-lazy-src").ifBlank {
-                    image.attr("data-original").ifBlank { image.attr("src") }
-                }
-            }
-        })
-
-        val cardText = card.text()
-        val series = cardText.contains("dizi", true) || cardText.contains("sezon", true) || cardText.contains("bölüm", true) || path.startsWith("/dizi/") || path.contains("/series/")
-        return if (series) newTvSeriesSearchResponse(cardTitle, href) { this.posterUrl = posterUrl }
-        else newMovieSearchResponse(cardTitle, href, TvType.Movie) { this.posterUrl = posterUrl }
-    }
-
     override suspend fun search(query: String): List<SearchResponse> {
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val searchUrls = listOf("$mainUrl/?s=$encoded", "$mainUrl/film?s=$encoded", "$mainUrl/film-izle?s=$encoded")
-        for (searchUrl in searchUrls) {
+        val urls = listOf(
+            "$mainUrl/?s=$encoded",
+            "$mainUrl/film?s=$encoded",
+            "$mainUrl/film-izle?s=$encoded"
+        )
+
+        for (searchUrl in urls) {
             val results = runCatching {
-                app.get(searchUrl).document.select("article, .film-box, .movie-item, .poster, .movie, .film, .item")
+                app.get(searchUrl).document
+                    .select("article, .film-box, .movie-item, .poster, .movie, .film, .item, li")
                     .mapNotNull { it.toSearchResult() }
                     .distinctBy { it.url }
             }.getOrNull().orEmpty()
             if (results.isNotEmpty()) return results
         }
+
         return emptyList()
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
-    private fun extractValue(text: String, pattern: String, group: Int = 1): String? =
-        Regex(pattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-            .find(text)?.groupValues?.getOrNull(group)?.trim()?.takeIf { it.isNotBlank() }
+    private fun valueFromMeta(document: org.jsoup.nodes.Document, selector: String): String? =
+        document.selectFirst(selector)?.attr("content")?.trim()?.takeIf { it.isNotBlank() }
 
     override suspend fun load(url: String): LoadResponse? {
         val document = runCatching { app.get(url).document }.getOrNull() ?: return null
         val pageText = document.text().replace(Regex("\\s+"), " ").trim()
 
-        val titleValue = document.selectFirst("h1")?.text()?.trim()?.takeIf { it.isNotBlank() }
-            ?: document.selectFirst("meta[property='og:title']")?.attr("content")?.trim()
+        val title = document.selectFirst("h1")?.text()?.trim()?.takeIf { it.isNotBlank() }
+            ?: valueFromMeta(document, "meta[property='og:title']")
             ?: document.title().substringBefore("|").trim().takeIf { it.isNotBlank() }
-            ?: url.substringAfterLast("/").substringBefore("-izle").replace('-', ' ').replaceFirstChar { it.uppercase() }
+            ?: url.substringAfterLast("/").substringBefore("-izle").replace('-', ' ')
 
-        val posterUrlValue = document.selectFirst("meta[property='og:image'], meta[name='twitter:image']")?.attr("content")?.let(::fixUrlNull)
+        val poster = valueFromMeta(document, "meta[property='og:image']")?.let(::fixUrlNull)
             ?: document.selectFirst("img")?.let { image ->
-                fixUrlNull(image.attr("data-src").ifBlank {
-                    image.attr("data-lazy-src").ifBlank {
-                        image.attr("data-original").ifBlank { image.attr("src") }
+                fixUrlNull(
+                    image.attr("data-src").ifBlank {
+                        image.attr("data-lazy-src").ifBlank {
+                            image.attr("data-original").ifBlank { image.attr("src") }
+                        }
                     }
-                })
+                )
             }
 
-        val plotValue = extractValue(pageText, "Genel Bakış\\s*(.*?)(?:Bu Film özeti|Ülke\\s)")
-            ?: document.select("p").map { it.text().trim() }
-                .filter { it.length >= 80 && !it.contains("Hint Film izleme sitemizde", true) }
-                .maxByOrNull { it.length }
-            ?: document.selectFirst("meta[name='description'], meta[property='og:description']")?.attr("content")?.trim()
+        val plot = document.select("p").map { it.text().trim() }
+            .filter { it.length >= 60 && !it.contains("Hint Film izleme sitemizde", true) }
+            .maxByOrNull { it.length }
+            ?: valueFromMeta(document, "meta[name='description']")
+            ?: valueFromMeta(document, "meta[property='og:description']")
 
-        val genreTags = document.select("a[href*='/tur/']")
+        val tags = document.select("a[href*='/tur/']")
             .map { it.text().trim() }
             .filter { it.isNotBlank() }
             .distinct()
 
-        val episodes = document.select("a[href]").mapNotNull { anchorElement ->
-            val episodeText = anchorElement.text().trim()
-            val episodeHref = fixUrlNull(anchorElement.attr("href").trim())
-            if (episodeHref == null || episodeText.isBlank()) return@mapNotNull null
-            val match = Regex("(?:S(?:ezon)?\\s*)?(\\d+)?\\s*(?:x|[.]?Bölüm|Episode)\\s*(\\d+)", RegexOption.IGNORE_CASE).find(episodeText)
-            if (match != null) {
-                newEpisode(episodeHref) {
-                    name = episodeText
-                    season = match.groupValues.getOrNull(1)?.toIntOrNull() ?: 1
-                    episode = match.groupValues.getOrNull(2)?.toIntOrNull() ?: 1
-                }
-            } else null
-        }.distinctBy { it.data }
+        val isSeries = pageText.contains("bölüm", true) || pageText.contains("sezon", true) || url.contains("/dizi/")
 
-        val series = episodes.isNotEmpty() || pageText.contains("sezon", true) || pageText.contains("bölüm", true) || url.contains("/dizi/")
-
-        return if (series) {
-            newTvSeriesLoadResponse(titleValue, url, TvType.TvSeries, episodes) {
-                this.posterUrl = posterUrlValue
-                this.plot = plotValue
-                this.tags = genreTags
-            }
-        } else {
-            newMovieLoadResponse(titleValue, url, TvType.Movie, url) {
-                this.posterUrl = posterUrlValue
-                this.plot = plotValue
-                this.tags = genreTags
-            }
+        return newMovieLoadResponse(title, url, if (isSeries) TvType.TvSeries else TvType.Movie, url) {
+            this.posterUrl = poster
+            this.plot = plot
+            this.tags = tags
         }
     }
 
-    private suspend fun loadFrame(frameUrl: String, referer: String, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
-        var loaded = false
+    private fun collectCandidateUrls(document: org.jsoup.nodes.Document): List<String> {
+        val candidates = linkedSetOf<String>()
+
+        document.select("iframe, video, source, a, button, div, embed, object").forEach { element ->
+            listOf(
+                "src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video",
+                "data-embed", "data-player", "data-content", "data-href", "data-lazy-src"
+            ).forEach { attribute ->
+                val raw = element.attr(attribute).trim()
+                val fixed = fixUrlNull(raw)
+                if (fixed != null && (fixed.startsWith("http://") || fixed.startsWith("https://"))) candidates += fixed
+            }
+        }
+
+        document.select("script").forEach { script ->
+            val html = script.data()
+            Regex("https?://[^\\\"'\\s<>]+", RegexOption.IGNORE_CASE).findAll(html).forEach { match ->
+                val fixed = fixUrlNull(match.value)
+                if (fixed != null) candidates += fixed
+            }
+        }
+
+        return candidates.filterNot { it.contains("google.com", true) || it.contains("facebook.com", true) || it.contains("twitter.com", true) }
+    }
+
+    private suspend fun tryExtractor(
+        url: String,
+        referer: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        var found = false
         runCatching {
-            loadExtractor(frameUrl, referer, subtitleCallback, callback)
-            loaded = true
+            loadExtractor(url, referer, subtitleCallback, callback)
+            found = true
         }
         runCatching {
-            val childDocument = app.get(frameUrl, referer = referer).document
-            val childFrames = childDocument.select("iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], video source[src], video[src], source[src]")
-                .mapNotNull { element ->
-                    val rawUrl = element.attr("src").ifBlank {
-                        element.attr("data-src").ifBlank {
-                            element.attr("data-lazy-src").ifBlank { element.attr("data-url") }
-                        }
-                    }
-                    fixUrlNull(rawUrl)
-                }.distinct()
-            childFrames.forEach { nestedUrl ->
+            val child = app.get(url, referer = referer).document
+            collectCandidateUrls(child).forEach { nested ->
                 runCatching {
-                    loadExtractor(nestedUrl, frameUrl, subtitleCallback, callback)
-                    loaded = true
+                    loadExtractor(nested, url, subtitleCallback, callback)
+                    found = true
                 }
             }
         }
-        return loaded
+        return found
     }
 
     override suspend fun loadLinks(
@@ -208,32 +216,24 @@ class HintFilmIzle : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = runCatching { app.get(data).document }.getOrNull() ?: return false
-        var loaded = false
+        var found = false
 
-        val frameUrls = document.select("iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], video source[src], video[src], source[src]")
-            .mapNotNull { element ->
-                val rawUrl = element.attr("src").ifBlank {
-                    element.attr("data-src").ifBlank {
-                        element.attr("data-lazy-src").ifBlank { element.attr("data-url") }
-                    }
+        collectCandidateUrls(document).forEach { candidate ->
+            if (tryExtractor(candidate, data, subtitleCallback, callback)) found = true
+        }
+
+        if (!found) {
+            val playerButtons = document.select("a, button, [role=button], [onclick]")
+                .filter { it.text().contains("TEKPART", true) || it.attr("onclick").contains("player", true) || it.attr("onclick").contains("embed", true) }
+
+            playerButtons.forEach { button ->
+                val onclick = button.attr("onclick")
+                Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(onclick).forEach { match ->
+                    if (tryExtractor(match.value, data, subtitleCallback, callback)) found = true
                 }
-                fixUrlNull(rawUrl)
-            }.distinct()
-
-        frameUrls.forEach { frameUrl ->
-            if (loadFrame(frameUrl, data, subtitleCallback, callback)) loaded = true
+            }
         }
 
-        val playerUrls = document.select("a[href]").mapNotNull { anchor ->
-            val anchorText = anchor.text().trim()
-            val href = fixUrlNull(anchor.attr("href").trim())
-            if (href != null && (anchorText.contains("TEKPART", true) || anchorText.contains("PART", true) || href.contains("embed", true) || href.contains("player", true))) href else null
-        }.distinct()
-
-        playerUrls.forEach { playerUrl ->
-            if (loadFrame(playerUrl, data, subtitleCallback, callback)) loaded = true
-        }
-
-        return loaded
+        return found
     }
 }
