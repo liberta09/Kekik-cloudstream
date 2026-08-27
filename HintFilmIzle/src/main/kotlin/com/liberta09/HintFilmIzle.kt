@@ -19,7 +19,6 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Element
-import org.jsoup.nodes.Document
 import java.net.URLEncoder
 
 class HintFilmIzle : MainAPI() {
@@ -70,6 +69,7 @@ class HintFilmIzle : MainAPI() {
         val anchor = if (tagName() == "a") this else card.selectFirst("a[href]") ?: return null
         val href = fixUrlNull(anchor.attr("href").trim()) ?: return null
         if (!href.startsWith(mainUrl)) return null
+
         val path = href.removePrefix(mainUrl).substringBefore("?").removeSuffix("/")
         if (path.isBlank() || path == "/film" || path == "/film-izle" || path == "/trendler" || path.startsWith("/tur/") || path.startsWith("/kategori") || path.startsWith("/koleksiyon")) return null
 
@@ -106,45 +106,42 @@ class HintFilmIzle : MainAPI() {
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
-    private fun Document.metaContent(property: String): String? =
-        selectFirst("meta[property='$property'], meta[name='$property']")?.attr("content")?.trim()?.takeIf { it.isNotBlank() }
-
-    private fun Document.firstText(vararg selectors: String): String? =
-        selectors.asSequence().mapNotNull { selector -> selectFirst(selector)?.text()?.trim()?.takeIf { it.isNotBlank() } }.firstOrNull()
-
-    private fun Document.firstUrl(vararg selectors: String): String? =
-        selectors.asSequence().mapNotNull { selector -> selectFirst(selector)?.let { element ->
-            val raw = if (element.tagName() == "meta") element.attr("content") else element.attr("data-src").ifBlank { element.attr("data-lazy-src").ifBlank { element.attr("data-original").ifBlank { element.attr("src") } } }
-            fixUrlNull(raw)
-        } }.firstOrNull()
+    private fun extractValue(text: String, pattern: String, group: Int = 1): String? =
+        Regex(pattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(text)?.groupValues?.getOrNull(group)?.trim()?.takeIf { it.isNotBlank() }
 
     override suspend fun load(url: String): LoadResponse? {
         val document = runCatching { app.get(url).document }.getOrNull() ?: return null
+        val pageText = document.text().replace(Regex("\\s+"), " ").trim()
 
-        val title = firstText(
-            "h1", ".film-title", ".movie-title", ".single-title", ".entry-title", ".post-title", ".title"
-        )?.substringBefore("|")?.trim()
-            ?: document.metaContent("og:title")?.substringBefore("|")?.trim()
-            ?: document.selectFirst("title")?.text()?.substringBefore("|")?.trim()
-            ?: return null
+        val title = document.selectFirst("h1")?.text()?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: document.selectFirst("meta[property='og:title']")?.attr("content")?.trim()
+            ?: document.title().substringBefore("|").trim()
+            .takeIf { it.isNotBlank() }
+            ?: url.substringAfterLast("/").substringBefore("-izle").replace('-', ' ').replaceFirstChar { it.uppercase() }
 
-        val poster = firstUrl(
-            "meta[property='og:image']", "meta[name='twitter:image']", ".film-poster img", ".movie-poster img",
-            ".single-poster img", ".poster img", ".film img", ".movie img"
-        )
+        val poster = document.selectFirst("meta[property='og:image'], meta[name='twitter:image']")?.attr("content")
+            ?.let(::fixUrlNull)
+            ?: document.selectFirst("img")?.let { img ->
+                fixUrlNull(img.attr("data-src").ifBlank { img.attr("data-lazy-src").ifBlank { img.attr("data-original").ifBlank { img.attr("src") } } })
+            }
 
-        val plotText = firstText(
-            ".description", ".plot", ".summary", ".synopsis", ".film-description", ".movie-description",
-            ".entry-content p", ".entry-content", ".post-content"
-        ) ?: document.metaContent("og:description") ?: document.metaContent("description")
+        val plot = extractValue(pageText, "Genel Bakış\\s*(.*?)(?:Bu Film özeti|Ülke\\s)")
+            ?: document.select("p").map { it.text().trim() }
+                .filter { it.length >= 80 && !it.contains("Hint Film izleme sitemizde", true) }
+                .maxByOrNull { it.length }
+            ?: document.selectFirst("meta[name='description'], meta[property='og:description']")?.attr("content")?.trim()
 
-        val genreTags = document.select("a[href*='/tur/'], .genre a, .genres a, .category a, .categories a")
+        val year = extractValue(pageText, "Yapım Yılı\\s*((?:19|20)\\d{2})")?.toIntOrNull()
+            ?: Regex("\\b((?:19|20)\\d{2})\\b").find(pageText)?.groupValues?.getOrNull(1)?.toIntOrNull()
+
+        val duration = extractValue(pageText, "Süre\\s*(\\d{2,3})\\s*(?:dk|dakika)")?.toIntOrNull()
+        val imdb = extractValue(pageText, "IMDb Puanı\\s*([0-9]+(?:[.,][0-9]+)?)")?.replace(',', '.')?.toDoubleOrNull()
+
+        val tags = document.select("a[href*='/tur/']")
             .map { it.text().trim() }
             .filter { it.isNotBlank() }
             .distinct()
-
-        val pageText = document.text()
-        val yearValue = Regex("\\b(19|20)\\d{2}\\b").find(pageText)?.value?.toIntOrNull()
 
         val episodes = document.select("a[href]").mapNotNull { a ->
             val text = a.text().trim()
@@ -160,23 +157,56 @@ class HintFilmIzle : MainAPI() {
             } else null
         }.distinctBy { it.data }
 
-        val looksLikeSeries = episodes.isNotEmpty() || pageText.contains("sezon", true) || pageText.contains("bölüm", true) || url.contains("/dizi/")
+        val isSeries = episodes.isNotEmpty() || pageText.contains("sezon", true) || pageText.contains("bölüm", true) || url.contains("/dizi/")
 
-        return if (looksLikeSeries) {
+        return if (isSeries) {
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 posterUrl = poster
-                plot = plotText
-                tags = genreTags
-                year = yearValue
+                plot = plot
+                tags = tags
+                year = year
+                if (duration != null) duration = duration
+                if (imdb != null) imdbRating = imdb
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, url) {
                 posterUrl = poster
-                plot = plotText
-                tags = genreTags
-                year = yearValue
+                plot = plot
+                tags = tags
+                year = year
+                if (duration != null) duration = duration
+                if (imdb != null) imdbRating = imdb
             }
         }
+    }
+
+    private suspend fun loadFrame(url: String, referer: String, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+        var loaded = false
+        runCatching {
+            loadExtractor(url, referer, subtitleCallback, callback)
+            loaded = true
+        }
+        runCatching {
+            val child = app.get(url, referer = referer).document
+            val childFrames = child.select("iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], video source[src], video[src], source[src]")
+                .mapNotNull { element ->
+                    val value = element.attr("src").ifBlank {
+                        element.attr("data-src").ifBlank {
+                            element.attr("data-lazy-src").ifBlank {
+                                element.attr("data-url")
+                            }
+                        }
+                    }
+                    fixUrlNull(value)
+                }.distinct()
+            childFrames.forEach {
+                runCatching {
+                    loadExtractor(it, url, subtitleCallback, callback)
+                    loaded = true
+                }
+            }
+        }
+        return loaded
     }
 
     override suspend fun loadLinks(
@@ -186,26 +216,35 @@ class HintFilmIzle : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = runCatching { app.get(data).document }.getOrNull() ?: return false
-        val frames = document.select(
-            "iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], video source[src], video[src], source[src], a[href*='embed'], a[href*='player']"
+        var loaded = false
+
+        val directFrames = document.select(
+            "iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], video source[src], video[src], source[src]"
         ).mapNotNull { element ->
             val value = element.attr("src").ifBlank {
                 element.attr("data-src").ifBlank {
                     element.attr("data-lazy-src").ifBlank {
-                        element.attr("data-url").ifBlank { element.attr("href") }
+                        element.attr("data-url")
                     }
                 }
             }
             fixUrlNull(value)
         }.distinct()
 
-        var loaded = false
-        frames.forEach { frame ->
-            runCatching {
-                loadExtractor(frame, data, subtitleCallback, callback)
-                loaded = true
-            }
+        directFrames.forEach { frame ->
+            if (loadFrame(frame, data, subtitleCallback, callback)) loaded = true
         }
+
+        val playerLinks = document.select("a[href]").mapNotNull { a ->
+            val text = a.text().trim()
+            val href = fixUrlNull(a.attr("href").trim())
+            if (href != null && (text.contains("TEKPART", true) || text.contains("PART", true) || href.contains("embed", true) || href.contains("player", true))) href else null
+        }.distinct()
+
+        playerLinks.forEach { link ->
+            if (loadFrame(link, data, subtitleCallback, callback)) loaded = true
+        }
+
         return loaded
     }
 }

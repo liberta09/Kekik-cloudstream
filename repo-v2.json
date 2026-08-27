@@ -1,6 +1,6 @@
 {
-  "name": "Kekik CloudStream",
-  "description": "Kekik Türkçe CloudStream eklentileri",
+  "name": "gsrepo",
+  "description": "gsrepo Türkçe CloudStream eklenti havuzu",
   "manifestVersion": 1,
   "pluginLists": [
     "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/plugins.json?v=20260827-1"
