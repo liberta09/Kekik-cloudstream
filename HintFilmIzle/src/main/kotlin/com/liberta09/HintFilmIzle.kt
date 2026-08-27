@@ -161,29 +161,60 @@ class HintFilmIzle : MainAPI() {
         }
     }
 
+    private fun isTrailerHost(url: String): Boolean {
+        val lower = url.lowercase()
+        return lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("youtube-nocookie.com") ||
+            lower.contains("vimeo.com") || lower.contains("facebook.com") || lower.contains("twitter.com") ||
+            lower.contains("x.com")
+    }
+
+    private fun isPlayerCandidate(element: Element): Boolean {
+        val marker = listOf(
+            element.text(),
+            element.attr("class"),
+            element.attr("id"),
+            element.attr("data-player"),
+            element.attr("data-embed"),
+            element.attr("data-video"),
+            element.attr("onclick")
+        ).joinToString(" ").lowercase()
+        return marker.contains("tekpart") || marker.contains("player") || marker.contains("embed") ||
+            marker.contains("video") || marker.contains("part")
+    }
+
     private fun collectCandidateUrls(document: org.jsoup.nodes.Document): List<String> {
         val candidates = linkedSetOf<String>()
+        val attributes = listOf(
+            "src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video",
+            "data-embed", "data-player", "data-content", "data-href", "data-lazy-src"
+        )
 
-        document.select("iframe, video, source, a, button, div, embed, object").forEach { element ->
-            listOf(
-                "src", "href", "data-src", "data-url", "data-link", "data-iframe", "data-video",
-                "data-embed", "data-player", "data-content", "data-href", "data-lazy-src"
-            ).forEach { attribute ->
-                val raw = element.attr(attribute).trim()
-                val fixed = fixUrlNull(raw)
-                if (fixed != null && (fixed.startsWith("http://") || fixed.startsWith("https://"))) candidates += fixed
+        document.select("iframe, video, source, embed, object, a, button, [role=button], [onclick]")
+            .filter { element ->
+                element.tagName() in setOf("iframe", "video", "source", "embed", "object") || isPlayerCandidate(element)
             }
-        }
+            .forEach { element ->
+                attributes.forEach { attribute ->
+                    val fixed = fixUrlNull(element.attr(attribute).trim())
+                    if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
+                }
+                val onclick = element.attr("onclick")
+                Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(onclick).forEach { match ->
+                    val fixed = fixUrlNull(match.value)
+                    if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
+                }
+            }
 
-        document.select("script").forEach { script ->
-            val html = script.data()
-            Regex("https?://[^\\\"'\\s<>]+", RegexOption.IGNORE_CASE).findAll(html).forEach { match ->
+        document.select("script").filter { script ->
+            script.data().contains(Regex("tekpart|player|embed|m3u8|mp4", RegexOption.IGNORE_CASE))
+        }.forEach { script ->
+            Regex("https?://[^\\\"'\\s<>]+", RegexOption.IGNORE_CASE).findAll(script.data()).forEach { match ->
                 val fixed = fixUrlNull(match.value)
-                if (fixed != null) candidates += fixed
+                if (fixed != null && !isTrailerHost(fixed)) candidates += fixed
             }
         }
 
-        return candidates.filterNot { it.contains("google.com", true) || it.contains("facebook.com", true) || it.contains("twitter.com", true) }
+        return candidates.toList()
     }
 
     private suspend fun tryExtractor(
@@ -192,6 +223,7 @@ class HintFilmIzle : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        if (isTrailerHost(url)) return false
         var found = false
         runCatching {
             loadExtractor(url, referer, subtitleCallback, callback)
@@ -200,9 +232,11 @@ class HintFilmIzle : MainAPI() {
         runCatching {
             val child = app.get(url, referer = referer).document
             collectCandidateUrls(child).forEach { nested ->
-                runCatching {
-                    loadExtractor(nested, url, subtitleCallback, callback)
-                    found = true
+                if (!isTrailerHost(nested)) {
+                    runCatching {
+                        loadExtractor(nested, url, subtitleCallback, callback)
+                        found = true
+                    }
                 }
             }
         }
@@ -223,15 +257,14 @@ class HintFilmIzle : MainAPI() {
         }
 
         if (!found) {
-            val playerButtons = document.select("a, button, [role=button], [onclick]")
-                .filter { it.text().contains("TEKPART", true) || it.attr("onclick").contains("player", true) || it.attr("onclick").contains("embed", true) }
-
-            playerButtons.forEach { button ->
-                val onclick = button.attr("onclick")
-                Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(onclick).forEach { match ->
-                    if (tryExtractor(match.value, data, subtitleCallback, callback)) found = true
+            document.select("a, button, [role=button], [onclick]")
+                .filter { isPlayerCandidate(it) }
+                .forEach { button ->
+                    val onclick = button.attr("onclick")
+                    Regex("https?://[^\\\"'()\\s<>]+", RegexOption.IGNORE_CASE).findAll(onclick).forEach { match ->
+                        if (tryExtractor(match.value, data, subtitleCallback, callback)) found = true
+                    }
                 }
-            }
         }
 
         return found
