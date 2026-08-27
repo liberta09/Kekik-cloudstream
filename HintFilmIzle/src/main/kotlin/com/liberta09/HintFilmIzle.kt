@@ -105,37 +105,79 @@ class HintFilmIzle : MainAPI() {
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
+    private fun org.jsoup.nodes.Document.metaContent(property: String): String? =
+        selectFirst("meta[property='$property'], meta[name='$property']")?.attr("content")?.trim()?.takeIf { it.isNotBlank() }
+
+    private fun org.jsoup.nodes.Document firstText(vararg selectors: String): String? =
+        selectors.asSequence().mapNotNull { selector -> selectFirst(selector)?.text()?.trim()?.takeIf { it.isNotBlank() } }.firstOrNull()
+
+    private fun org.jsoup.nodes.Document firstUrl(vararg selectors: String): String? =
+        selectors.asSequence().mapNotNull { selector -> selectFirst(selector)?.let { element ->
+            val raw = if (element.tagName() == "meta") element.attr("content") else element.attr("data-src").ifBlank { element.attr("data-lazy-src").ifBlank { element.attr("data-original").ifBlank { element.attr("src") } } }
+            fixUrlNull(raw)
+        } }.firstOrNull()
+
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url).document
-        val title = document.selectFirst("h1, .film h1, .movie-title, .entry-title, .single-title, .post-title")?.text()?.trim()
-            ?: document.title().substringBefore("|").trim().takeIf { it.isNotBlank() } ?: return null
-        val poster = fixUrlNull(document.selectFirst("meta[property='og:image'], .film img, .movie img, .poster img, .single-poster img")?.let { element ->
-            if (element.tagName() == "meta") element.attr("content") else element.attr("data-src").ifBlank { element.attr("data-lazy-src").ifBlank { element.attr("data-original").ifBlank { element.attr("src") } } }
-        })
-        val plotText = document.selectFirst(".description, .plot, .summary, .synopsis, .film-description, .entry-content p")?.text()?.trim()
-        val tagsText = document.select("a[href*='/tur/'], .genre a, .genres a, .category a").map { it.text().trim() }.filter { it.isNotBlank() }.distinct()
-        val yearValue = Regex("\\b(19|20)\\d{2}\\b").find(document.text())?.value?.toIntOrNull()
+        val document = runCatching { app.get(url).document }.getOrNull() ?: return null
+
+        val title = firstText(
+            "h1", ".film-title", ".movie-title", ".single-title", ".entry-title", ".post-title", ".title"
+        )?.substringBefore("|")?.trim()
+            ?: document.metaContent("og:title")?.substringBefore("|")?.trim()
+            ?: document.selectFirst("title")?.text()?.substringBefore("|")?.trim()
+            ?: return null
+
+        val poster = firstUrl(
+            "meta[property='og:image']", "meta[name='twitter:image']", ".film-poster img", ".movie-poster img",
+            ".single-poster img", ".poster img", ".film img", ".movie img"
+        )
+
+        val plot = firstText(
+            ".description", ".plot", ".summary", ".synopsis", ".film-description", ".movie-description",
+            ".entry-content p", ".entry-content", ".post-content"
+        ) ?: document.metaContent("og:description") ?: document.metaContent("description")
+
+        val genreTags = document.select("a[href*='/tur/'], .genre a, .genres a, .category a, .categories a")
+            .map { it.text().trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        val pageText = document.text()
+        val year = Regex("\\b(19|20)\\d{2}\\b").find(pageText)?.value?.toIntOrNull()
+        val duration = Regex("\\b(\\d{2,3})\\s*(?:dk|dakika|min|mins?)\\b", RegexOption.IGNORE_CASE).find(pageText)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        val imdb = Regex("IMDb(?: Puanı|:)??\\s*([0-9](?:[.,][0-9])?)", RegexOption.IGNORE_CASE).find(pageText)?.groupValues?.getOrNull(1)?.replace(',', '.')?.toDoubleOrNull()
+
         val episodes = document.select("a[href]").mapNotNull { a ->
             val text = a.text().trim()
-            val href = fixUrlNull(a.attr("href"))
-            val match = Regex("(?:S|Sezon\\s*)?(\\d+)?\\s*(?:x|[.]?Bölüm|Episode)\\s*(\\d+)", RegexOption.IGNORE_CASE).find(text)
-            if (href != null && match != null) newEpisode(href) { name = text; episode = match.groupValues.lastOrNull()?.toIntOrNull() } else null
+            val href = fixUrlNull(a.attr("href").trim())
+            if (href == null || text.isBlank()) return@mapNotNull null
+            val match = Regex("(?:S(?:ezon)?\\s*)?(\\d+)?\\s*(?:x|[.]?Bölüm|Episode)\\s*(\\d+)", RegexOption.IGNORE_CASE).find(text)
+            if (match != null) {
+                newEpisode(href) {
+                    name = text
+                    season = match.groupValues.getOrNull(1)?.toIntOrNull() ?: 1
+                    episode = match.groupValues.getOrNull(2)?.toIntOrNull() ?: 1
+                }
+            } else null
         }.distinctBy { it.data }
-        val isSeries = episodes.isNotEmpty() || document.text().contains("sezon", true) || document.text().contains("bölüm", true) || url.contains("/dizi/")
 
-        return if (isSeries) {
+        val looksLikeSeries = episodes.isNotEmpty() || pageText.contains("sezon", true) || pageText.contains("bölüm", true) || url.contains("/dizi/")
+
+        return if (looksLikeSeries) {
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 posterUrl = poster
-                plot = plotText
-                tags = tagsText
-                year = yearValue
+                plot = plot
+                tags = genreTags
+                year = year
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, url) {
                 posterUrl = poster
-                plot = plotText
-                tags = tagsText
-                year = yearValue
+                plot = plot
+                tags = genreTags
+                year = year
+                if (duration != null) duration = duration
+                if (imdb != null) imdbRating = imdb
             }
         }
     }
@@ -146,13 +188,27 @@ class HintFilmIzle : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data).document
-        val frames = document.select("iframe[src], iframe[data-src], iframe[data-lazy-src], video source[src], source[src]")
-            .mapNotNull { element ->
-                val value = element.attr("src").ifBlank { element.attr("data-src").ifBlank { element.attr("data-lazy-src") } }
-                fixUrlNull(value)
-            }.distinct()
-        frames.forEach { frame -> runCatching { loadExtractor(frame, data, subtitleCallback, callback) } }
-        return frames.isNotEmpty()
+        val document = runCatching { app.get(data).document }.getOrNull() ?: return false
+        val frames = document.select(
+            "iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], video source[src], video[src], source[src], a[href*='embed'], a[href*='player']"
+        ).mapNotNull { element ->
+            val value = element.attr("src").ifBlank {
+                element.attr("data-src").ifBlank {
+                    element.attr("data-lazy-src").ifBlank {
+                        element.attr("data-url").ifBlank { element.attr("href") }
+                    }
+                }
+            }
+            fixUrlNull(value)
+        }.distinct()
+
+        var loaded = false
+        frames.forEach { frame ->
+            runCatching {
+                loadExtractor(frame, data, subtitleCallback, callback)
+                loaded = true
+            }
+        }
+        return loaded
     }
 }
