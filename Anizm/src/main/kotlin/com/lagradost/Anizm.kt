@@ -242,7 +242,7 @@ class Anizm : MainAPI() {
                 it.select("a").attr("translator"),
                 it.select("div.title").text()
             )
-        }.apmap { (url, translator) ->
+        }.amap { (url, translator) ->
             safeApiCall {
                 app.get(
                     url,
@@ -252,7 +252,7 @@ class Anizm : MainAPI() {
                         "X-Requested-With" to "XMLHttpRequest"
                     )
                 ).parsedSafe<Translators>()?.data?.let {
-                    Jsoup.parse(it).select("a").apmap { video ->
+                    Jsoup.parse(it).select("a").amap { video ->
                         app.get(
                             video.attr("video"),
                             referer = data,
