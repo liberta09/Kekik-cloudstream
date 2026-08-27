@@ -1,7 +1,7 @@
 name: CloudStream Derleyici
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 on:
@@ -16,78 +16,71 @@ on:
       - "**/*.png"
       - "**/*.py"
 
+permissions:
+  contents: write
+
 jobs:
   CloudStreamDerleyici:
     runs-on: ubuntu-latest
     steps:
-      - name: "'src' Depo Kontrolü"
-        uses: actions/checkout@v4.2.2
+      - name: Kaynak kodu kontrol et
+        uses: actions/checkout@v6
         with:
-          path: "src"
+          ref: master
+          path: src
+          fetch-depth: 1
 
-      - name: "'build' Depo Kontrolü"
-        uses: actions/checkout@v4.2.2
+      - name: Builds dalını kontrol et
+        uses: actions/checkout@v6
         with:
-          ref: "builds"
-          path: "builds"
+          ref: builds
+          path: builds
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
 
-      - name: Eski Derlemeleri Temizle
-        run: find $GITHUB_WORKSPACE/builds -name '*.cs3' -delete
+      - name: Eski derlemeleri temizle
+        run: rm -f "$GITHUB_WORKSPACE/builds"/*.cs3 "$GITHUB_WORKSPACE/builds/plugins.json"
 
-      - name: JDK 17 Ayarla
-        uses: actions/setup-java@v4.6.0
+      - name: JDK 17 ayarla
+        uses: actions/setup-java@v5
         with:
-          distribution: adopt
+          distribution: temurin
           java-version: 17
-          cache: gradle
 
-      - name: Android SDK Ayarla
-        uses: android-actions/setup-android@v3.2.2
+      - name: Gradle kurulumunu yap
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: false
 
-      - name: Güncel Domainleri Uygula
+      - name: Eklentileri derle
+        working-directory: src
         run: |
-          cd $GITHUB_WORKSPACE/src
-          sed -i 's#https://dizigom101.com#https://www.dizigom.love#g' DiziGom/src/main/kotlin/com/nikyokki/DiziGom.kt
-          sed -i 's#https://www.dizimom.bid#https://www.dizimom.work#g; s#https://www.dizimom.surf#https://www.dizimom.work#g' DiziMom/src/main/kotlin/com/keyiflerolsun/DiziMom.kt
-          sed -i 's#https://dizipal1214.com#https://dizipalt.com#g' DiziPal/src/main/kotlin/com/keyiflerolsun/DiziPal.kt
-          sed -i 's#https://www.setfilmizle.uk#https://setfilmizle.ltd#g; s#https://setfilmizle.uk#https://setfilmizle.ltd#g' SetFilmIzle/src/main/kotlin/com/keyiflerolsun/SetFilmIzle.kt
-          sed -i 's#dizigom1.co#www.dizigom.love#g; s/tvTypes = listOf("Movie")/tvTypes = listOf("TvSeries")/' DiziGom/build.gradle.kts
-          sed -i 's#www.dizibox.de#www.dizibox.live#g' DiziBox/build.gradle.kts
-          sed -i 's#dizikorea.vip#dizikorea3.com#g' DiziKorea/build.gradle.kts
-          sed -i 's#www.dizimom.tv#www.dizimom.work#g; s#www.dizimom.surf#www.dizimom.work#g' DiziMom/build.gradle.kts
-          sed -i 's#dizipal683.com#dizipalt.com#g' DiziPal/build.gradle.kts
-          sed -i 's#dizilla.club#dizilla.now#g; s#dizilla40.com#dizilla.now#g' Dizilla/build.gradle.kts
-          sed -i 's#https://dizilla40.com#https://dizilla.now#g; s#https://dizilla.to#https://dizilla.now#g' Dizilla/src/main/kotlin/com/keyiflerolsun/Dizilla.kt
-          sed -i 's#https://www.setfilmizle.uk#https://setfilmizle.ltd#g; s#https://setfilmizle.uk#https://setfilmizle.ltd#g' SetFilmIzle/build.gradle.kts
-          sed -i 's#dizimag.net#dizimag.com.tr#g' DiziMag/build.gradle.kts
-
-      - name: TurkAnime Kotlin Uyumluluk Düzeltmesi
-        run: |
-          cd $GITHUB_WORKSPACE/src
-          sed -i 's/private fun iframe2AesLink/private suspend fun iframe2AesLink/' TurkAnime/src/main/kotlin/com/keyiflerolsun/TurkAnime.kt
-
-      - name: DiziGom Kotlin Uyumluluk Düzeltmesi
-        run: |
-          cd $GITHUB_WORKSPACE/src
-          sed -i 's/yield(img.parent()?.attr("style"))/yield(img.parent()?.attr("style").orEmpty())/; s/yield(backgroundUrl())/yield(backgroundUrl().orEmpty())/' DiziGom/src/main/kotlin/com/nikyokki/DiziGom.kt
-
-      - name: Eklentileri Derle
-        run: |
-          cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
-          shopt -s globstar
-          ./gradlew make makePluginsJson --stacktrace
-          sed -i 's#https://raw.githubusercontent.com/csprofesor/nik-cloudstream/builds/SetFilmIzle.cs3"#https://raw.githubusercontent.com/csprofesor/nik-cloudstream/builds/SetFilmIzle.cs3?v=36"#' build/plugins.json
-          sed -i 's#https://raw.githubusercontent.com/csprofesor/nik-cloudstream/builds/DiziGom.cs3"#https://raw.githubusercontent.com/csprofesor/nik-cloudstream/builds/DiziGom.cs3?v=13"#' build/plugins.json
-          sed -i 's#https://raw.githubusercontent.com/csprofesor/nik-cloudstream/builds/DiziPalOriginal.cs3"#https://raw.githubusercontent.com/csprofesor/nik-cloudstream/builds/DiziPalOriginal.cs3?v=84"#' build/plugins.json
-          cp **/build/*.cs3 $GITHUB_WORKSPACE/builds
-          cp build/plugins.json $GITHUB_WORKSPACE/builds
+          ./gradlew make makePluginsJson
 
-      - name: Derlemeleri Yükle
+      - name: Derlemeleri builds dalına kopyala
         run: |
-          cd $GITHUB_WORKSPACE/builds
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git add .
-          git commit -m "Yeni Derleme: $GITHUB_SHA" || exit 0
-          git push --force
+          find "$GITHUB_WORKSPACE/src" -type f -name '*.cs3' -exec cp {} "$GITHUB_WORKSPACE/builds/" \;
+          cp "$GITHUB_WORKSPACE/src/build/plugins.json" "$GITHUB_WORKSPACE/builds/plugins.json"
+          if command -v jq >/dev/null 2>&1; then
+            jq 'map(select(.internalName != "AltiYuzAltmisAltiFilmIzle" and .name != "AltiYuzAltmisAltiFilmIzle"))' "$GITHUB_WORKSPACE/builds/plugins.json" > "$GITHUB_WORKSPACE/builds/plugins.json.tmp"
+            mv "$GITHUB_WORKSPACE/builds/plugins.json.tmp" "$GITHUB_WORKSPACE/builds/plugins.json"
+          fi
+          if [ -f "$GITHUB_WORKSPACE/builds/repo.json" ]; then
+            sed -i 's#https://raw.githubusercontent.com/feroxx/Kekik-cloudstream/builds/plugins.json#https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/plugins.json#g' "$GITHUB_WORKSPACE/builds/repo.json"
+            sed -i 's/@KekikAkademi/@liberta09/g' "$GITHUB_WORKSPACE/builds/repo.json"
+          fi
+
+      - name: Derlemeleri builds dalına gönder
+        working-directory: builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git add -A
+          git diff --cached --quiet && echo "Değişiklik yok" && exit 0
+          git commit -m "Build ${{ github.sha }}"
+          git push origin HEAD:builds

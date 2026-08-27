@@ -1,0 +1,60 @@
+# This workflow keeps Kekik-cloudstream synchronized with csprofesor/nik-cloudstream.
+name: Nik CloudStream ile Senkronize Et
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: write
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  sync:
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[nik-sync]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hedef repoyu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: nik-cloudstream'u senkronize et
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Yerel workflow'ları koru: GITHUB_TOKEN'un workflows izni olmadan
+          # workflow dosyalarını değiştirmeye çalışmasını engelle.
+          rm -rf /tmp/local-workflows /tmp/nik
+          mkdir -p /tmp/local-workflows
+          cp -a .github/workflows /tmp/local-workflows/workflows
+
+          git clone --branch master https://github.com/csprofesor/nik-cloudstream.git /tmp/nik
+
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          shopt -s dotglob
+          cp -a /tmp/nik/. .
+
+          # Senkronize edilen upstream workflow'larını at; hedef repodaki
+          # workflow'ları olduğu gibi geri koy.
+          rm -rf .github/workflows
+          mkdir -p .github
+          cp -a /tmp/local-workflows/workflows .github/workflows
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nik-cloudstream zaten güncel."
+            exit 0
+          fi
+          git commit -m "[nik-sync] Mirror csprofesor/nik-cloudstream"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin master --force
