@@ -46,6 +46,20 @@ jobs:
         run: |
           sed -i 's/\.filter { it\.isNotBlank() }/.filterNotNull().filter { it.isNotBlank() }/' DiziGom/src/main/kotlin/com/nikyokki/DiziGom.kt
 
+      - name: HintFilmIzle TEKPART data-frame düzeltmesi
+        working-directory: src
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('HintFilmIzle/src/main/kotlin/com/liberta09/HintFilmIzle.kt')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('"data-lazy-src", "data-litespeed-src", "srcdoc", "value"', '"data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
+          s = s.replace('"data-video", "data-embed", "data-player", "data-content", "data-href",\n            "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"', '"data-video", "data-embed", "data-player", "data-content", "data-href",\n            "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
+          s = s.replace('"data-embed", "data-player", "data-content", "data-href",\n            "data-lazy-src", "data-litespeed-src", "srcdoc", "value"', '"data-embed", "data-player", "data-content", "data-href",\n            "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
+          s = s.replace('"data-content", "data-href", "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"', '"data-content", "data-href", "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
+          p.write_text(s, encoding='utf-8')
+          PY
+
       - name: Eklentileri derle
         working-directory: src
         run: |
