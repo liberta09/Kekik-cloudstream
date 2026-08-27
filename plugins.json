@@ -613,7 +613,7 @@
   {
     "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/HintFilmIzle.cs3",
     "status": 1,
-    "version": 12,
+    "version": 13,
     "name": "HintFilmIzle",
     "internalName": "HintFilmIzle",
     "authors": [
@@ -629,7 +629,7 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=hintfilmizle.com&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-3f5ac9ddc3d80781087db4f13bbc2f7b40cc613c5c0a4e5879cd45f138520cdc"
+    "fileHash": "sha256-017c6212088f69c5c95e292afa0f4002e8562c60b7df96a09cf508bfdcbb44c5"
   },
   {
     "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/InatBox.cs3",
