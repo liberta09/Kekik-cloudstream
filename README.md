@@ -26,7 +26,7 @@ _CloudStream için Türkçe yayın yapan sitelere ait eklentiler_
 
 ---
 
-### 📺 » [Google TV Temel Kurulum Adımları](https://keyiflerolsun.me/Kekik-cloudstream/MiBox)
+### 📺 » [Google TV Temel Kurulum Adımları](https://KekikAkademi.org/MiBox)
 
 ---
 
@@ -49,6 +49,8 @@ _CloudStream için Türkçe yayın yapan sitelere ait eklentiler_
 
 * *Copyright (C) 2023 by* [keyiflerolsun](https://github.com/keyiflerolsun) ❤️️
 * [GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007](https://github.com/keyiflerolsun/Kekik-cloudstream/blob/master/LICENSE) *Koşullarına göre lisanslanmıştır..*
+
+---
 
 ## ♻️ İletişim
 
