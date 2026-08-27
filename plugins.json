@@ -22,7 +22,7 @@
   {
     "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/Anizm.cs3",
     "status": 1,
-    "version": 2,
+    "version": 3,
     "name": "Anizm",
     "internalName": "Anizm",
     "authors": [
@@ -38,7 +38,7 @@
     ],
     "iconUrl": "https://www.google.com/s2/favicons?domain=anizm.net&sz=%size%",
     "apiVersion": 1,
-    "fileHash": "sha256-6ef3bffe9a52f95e3d436bb00e77808fa71a2bbb949bf4914735bbc08406a8e7"
+    "fileHash": "sha256-5df511eb916b1d6fe371a750bcdc2505b13670e7ad5daa7298fb7a3710204393"
   },
   {
     "url": "https://raw.githubusercontent.com/liberta09/Kekik-cloudstream/builds/AsyaAnimeleri.cs3",
