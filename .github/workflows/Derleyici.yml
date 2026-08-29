@@ -54,11 +54,13 @@ jobs:
           p = Path('HintFilmIzle/src/main/kotlin/com/liberta09/HintFilmIzle.kt')
           s = p.read_text(encoding='utf-8')
           s = s.replace('"data-lazy-src", "data-litespeed-src", "srcdoc", "value"', '"data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
-          s = s.replace('"data-video", "data-embed", "data-player", "data-content", "data-href",\n            "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"', '"data-video", "data-embed", "data-player", "data-content", "data-href",\n            "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
-          s = s.replace('"data-embed", "data-player", "data-content", "data-href",\n            "data-lazy-src", "data-litespeed-src", "srcdoc", "value"', '"data-embed", "data-player", "data-content", "data-href",\n            "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
-          s = s.replace('"data-content", "data-href", "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"', '"data-content", "data-href", "data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
+          s = s.replace('"data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"', '"data-lazy-src", "data-litespeed-src", "data-frame", "srcdoc", "value"')
           p.write_text(s, encoding='utf-8')
           PY
+
+      - name: HDFilmCehennemi2 alan adını doğrula
+        working-directory: src
+        run: grep -q 'https://www.hdfilmcehennemi2.biz' HDFilmCehennemi2/src/main/kotlin/com/nikyokki/HDFilmCehennemi2.kt
 
       - name: Eklentileri derle
         working-directory: src
