@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-08-22",
+  "updated_at": "2026-08-29",
   "description": "Known old -> new domain mappings for CloudStream plugins",
   "mappings": {
     "dizibox.live": "https://www.dizibox.live",
@@ -9,164 +9,128 @@
     "dizibox.co": "https://www.dizibox.live",
     "dizibox.net": "https://www.dizibox.live",
     "dizibox.tv": "https://www.dizibox.live",
-
     "dizipal683.com": "https://dizipal952.com",
     "dizipal741.com": "https://dizipal952.com",
     "dizipal794.com": "https://dizipal952.com",
     "dizipal831.com": "https://dizipal952.com",
     "dizipal900.com": "https://dizipal952.com",
     "dizipal952.com": "https://dizipal952.com",
-
     "sezonlukdizi5.com": "https://sezonlukdizi6.com",
     "sezonlukdizi6.net": "https://sezonlukdizi6.com",
     "sezonlukdizi.com": "https://sezonlukdizi6.com",
     "sezonlukdizi.net": "https://sezonlukdizi6.com",
     "sezonlukdizi.tv": "https://sezonlukdizi6.com",
-
     "diziyou5.com": "https://www.diziyou6.com",
     "diziyou6.com": "https://www.diziyou6.com",
     "diziyou.co": "https://www.diziyou6.com",
     "diziyou.tv": "https://www.diziyou6.com",
-
     "setfilmizle.lol": "https://www.setfilmizle.nl",
     "setfilmizle.cc": "https://www.setfilmizle.nl",
     "setfilmizle.de": "https://www.setfilmizle.nl",
     "setfilmizle.me": "https://www.setfilmizle.nl",
-
     "fullhdfilmizlesene.com": "https://www.fullhdfilmizlesene.de",
     "fullhdfilmizlesene.de": "https://www.fullhdfilmizlesene.de",
     "fullhdfilmizlesene.net": "https://www.fullhdfilmizlesene.de",
-
-    "hdfilmcehennemi2.com": "https://www.hdfilmcehennemi2.site",
-    "hdfilmcehennemi2.site": "https://www.hdfilmcehennemi2.site",
-    "hdfilmcehennemi2.net": "https://www.hdfilmcehennemi2.site",
-
+    "hdfilmcehennemi2.com": "https://www.hdfilmcehennemi2.biz",
+    "hdfilmcehennemi2.site": "https://www.hdfilmcehennemi2.biz",
+    "hdfilmcehennemi2.net": "https://www.hdfilmcehennemi2.biz",
+    "hdfilmcehennemi2.biz": "https://www.hdfilmcehennemi2.biz",
     "hdfilmcehennemi.com": "https://www.hdfilmcehennemi.nl",
     "hdfilmcehennemi.nl": "https://www.hdfilmcehennemi.nl",
     "hdfilmcehennemi.net": "https://www.hdfilmcehennemi.nl",
     "hdfilmcehennemi.cc": "https://www.hdfilmcehennemi.nl",
-
     "filmmodu.net": "https://www.filmmodu.io",
     "filmmodu.io": "https://www.filmmodu.io",
     "filmmodu.tv": "https://www.filmmodu.io",
     "filmmodu17.com": "https://www.filmmodu.io",
     "filmmodu18.com": "https://www.filmmodu.io",
     "filmmodu19.com": "https://www.filmmodu.io",
-
     "filmizlesene.org": "https://www.filmizlesene.plus",
     "filmizlesene.plus": "https://www.filmizlesene.plus",
     "filmizlesene.net": "https://www.filmizlesene.plus",
-
     "wfilmizle.org": "https://www.wfilmizle.plus",
     "wfilmizle.plus": "https://www.wfilmizle.plus",
     "wfilmizle.my": "https://www.wfilmizle.plus",
     "wfilmizle.tv": "https://www.wfilmizle.plus",
     "wfilmizle.net": "https://www.wfilmizle.plus",
-
     "webteizle.xyz": "https://webteizle1.xyz",
     "webteizle1.xyz": "https://webteizle1.xyz",
     "webteizle2.com": "https://webteizle1.xyz",
     "webteizle3.com": "https://webteizle1.xyz",
-
     "sinemax.cc": "https://www.sinemax.cc",
     "sinema.cx": "https://www.sinemax.cc",
     "sinemax.net": "https://www.sinemax.cc",
-
     "dizimag.org": "https://dizimag.net",
     "dizimag.net": "https://dizimag.net",
     "dizimag.tv": "https://dizimag.net",
-
     "dizigom.tv": "https://dizigom1.co",
     "dizigom1.co": "https://dizigom1.co",
     "dizigom.co": "https://dizigom1.co",
-
     "yabancidizi.org": "https://yabancidizi.tv",
     "yabancidizi.tv": "https://yabancidizi.tv",
     "yabancidizi.net": "https://yabancidizi.tv",
     "yabancidizi.cc": "https://yabancidizi.tv",
-
     "vavoo.tv": "https://vavoo.to",
     "vavoo.to": "https://vavoo.to",
-
     "filmmakinesi.film": "https://filmmakinesi.de",
     "filmmakinesi.de": "https://filmmakinesi.de",
     "filmmakinesi.net": "https://filmmakinesi.de",
     "filmmakinesi.io": "https://filmmakinesi.de",
-
     "jetfilmizle.de": "https://jetfilmizle.io",
     "jetfilmizle.io": "https://jetfilmizle.io",
     "jetfilmizle.net": "https://jetfilmizle.io",
     "jetfilmizle.cc": "https://jetfilmizle.io",
-
     "kultfilmler.com": "https://kultfilmler.net",
     "kultfilmler.net": "https://kultfilmler.net",
     "kultfilmler.tv": "https://kultfilmler.net",
-
     "superfilmgeldi.biz": "https://superfilmgeldi.me",
     "superfilmgeldi.me": "https://superfilmgeldi.me",
     "superfilmgeldi.net": "https://superfilmgeldi.me",
     "superfilmgeldi.co": "https://superfilmgeldi.me",
-
     "ugurfilm7.com": "https://ugurfilm9.com",
     "ugurfilm8.com": "https://ugurfilm9.com",
     "ugurfilm9.com": "https://ugurfilm9.com",
     "ugurfilm.net": "https://ugurfilm9.com",
-
     "hdfilmizle.de": "https://hdfilmizle.io",
     "hdfilmizle.io": "https://hdfilmizle.io",
     "hdfilmizle.cc": "https://hdfilmizle.io",
-
     "hdfilmsitesi.com": "https://hdfilmsitesi.net",
     "hdfilmsitesi.net": "https://hdfilmsitesi.net",
-
     "selcukflix.de": "https://selcukflix.live",
     "selcukflix.live": "https://selcukflix.live",
     "selcukflix.net": "https://selcukflix.live",
-
     "4kfilmizlesene.com": "https://4kfilmizlesene.net",
     "4kfilmizlesene.net": "https://4kfilmizlesene.net",
-
     "dizikorea.co": "https://dizikorea.tv",
     "dizikorea.tv": "https://dizikorea.tv",
     "dizikorea.net": "https://dizikorea.tv",
-
     "dizimom.net": "https://dizimom.tv",
     "dizimom.tv": "https://dizimom.tv",
     "dizimom.co": "https://dizimom.tv",
-
     "dizilla.co": "https://dizilla.tv",
     "dizilla.tv": "https://dizilla.tv",
     "dizilla.net": "https://dizilla.tv",
-
     "turkanime.co": "https://turkanime.live",
     "turkanime.live": "https://turkanime.live",
     "turkanime.net": "https://turkanime.live",
-
     "belgeselx.com": "https://belgeselx.net",
     "belgeselx.net": "https://belgeselx.net",
-
     "fullhd.film": "https://fullhdfilm.io",
     "fullhdfilm.io": "https://fullhdfilm.io",
     "fullhdfilm.net": "https://fullhdfilm.io",
-
     "roketdizi.com": "https://roketdizi.net",
     "roketdizi.net": "https://roketdizi.net",
     "roketdizi.tv": "https://roketdizi.net",
-
     "ddizi.net": "https://ddizi.tv",
     "ddizi.tv": "https://ddizi.tv",
     "ddizi.co": "https://ddizi.tv",
-
     "koreaturk.com": "https://koreaturk.net",
     "koreaturk.net": "https://koreaturk.net",
     "koreanturk.com": "https://koreaturk.net",
-
     "powerdizi.com": "https://powerdizi.net",
     "powerdizi.net": "https://powerdizi.net",
-
     "powersinema.com": "https://powersinema.net",
     "powersinema.net": "https://powersinema.net",
-
     "dizipal.com": "https://dizipal952.com",
     "dizipal.net": "https://dizipal952.com",
     "dizipal.tv": "https://dizipal952.com"
