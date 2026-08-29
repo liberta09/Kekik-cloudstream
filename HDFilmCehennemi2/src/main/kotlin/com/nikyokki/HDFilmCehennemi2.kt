@@ -30,7 +30,7 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.nodes.Element
 
 class HDFilmCehennemi2 : MainAPI() {
-    override var mainUrl = "https://www.hdfilmcehennemi2.site"
+    override var mainUrl = "https://www.hdfilmcehennemi2.biz"
     override var name = "HDFilmCehennemi2"
     override val hasMainPage = true
     override var lang = "tr"
@@ -50,8 +50,8 @@ class HDFilmCehennemi2 : MainAPI() {
         "${mainUrl}/tur/gerilim-filmleri/" to "Gerilim",
         "${mainUrl}/tur/gizem-filmleri/" to "Gizem",
         "${mainUrl}/tur/komedi-filmleri/" to "Komedi",
-        "${mainUrl}/tur/korku-filmleri/" to "Korku",
-        "${mainUrl}/tur/macera-filmleri/" to "Macera",
+        "${mainUrl}/tur/korku-filmleri-izle/" to "Korku",
+        "${mainUrl}/tur/macera-filmleri-izle/" to "Macera",
         "${mainUrl}/tur/romantik-filmler/" to "Romantik",
         "${mainUrl}/tur/savas-filmleri/" to "Savaş",
         "${mainUrl}/tur/suc-filmleri/" to "Suç",
@@ -61,7 +61,6 @@ class HDFilmCehennemi2 : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = app.get("${request.data}/page/${page}").document
         val home = document.select("div.poster").mapNotNull { it.toMainPageResult() }
-
         return newHomePageResponse(request.name, home)
     }
 
@@ -69,11 +68,8 @@ class HDFilmCehennemi2 : MainAPI() {
         val title = this.selectFirst("div.poster-title h2")?.text()?.replace(" izle", "") ?: ""
         val href = fixUrlNull(this.selectFirst("a")?.attr("href")) ?: ""
         val posterUrl = fixUrlNull(this.selectFirst("div.poster-image img")?.attr("data-src"))
-
         if (href.contains("/dizi/")) {
-            return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-                this.posterUrl = posterUrl
-            }
+            return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
             return newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
         }
@@ -87,9 +83,7 @@ class HDFilmCehennemi2 : MainAPI() {
             return newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
         } else {
             val href = fixUrlNull("$mainUrl/${movie.slugPrefix}/${movie.slug}") ?: ""
-            return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-                this.posterUrl = posterUrl
-            }
+            return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         }
     }
 
@@ -102,11 +96,8 @@ class HDFilmCehennemi2 : MainAPI() {
         ).document.body().text()
 
         val result = mutableListOf<SearchResponse>()
-
         val json = ObjectMapper().readValue(response, HDSearchResponse::class.java)
-        json.result.forEach {
-            result.add(toSearchRes(it))
-        }
+        json.result.forEach { result.add(toSearchRes(it)) }
         return result
     }
 
@@ -114,7 +105,6 @@ class HDFilmCehennemi2 : MainAPI() {
         val title = this.selectFirst("div.title a")?.text() ?: return null
         val href = fixUrlNull(this.selectFirst("div.title a")?.attr("href")) ?: return null
         val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
-
         return newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
     }
 
@@ -122,13 +112,9 @@ class HDFilmCehennemi2 : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
-
-        val orgTitle =
-            document.selectFirst("div.card-header h1")?.text()?.substringBefore(" izle", "")?.trim()
-                ?: ""
+        val orgTitle = document.selectFirst("div.card-header h1")?.text()?.substringBefore(" izle", "")?.trim() ?: ""
         val altTitle = document.selectFirst("div.card-header small")?.text()?.trim() ?: ""
-        val title =
-            if (altTitle.isNotEmpty() && orgTitle != altTitle) "$orgTitle - $altTitle" else orgTitle
+        val title = if (altTitle.isNotEmpty() && orgTitle != altTitle) "$orgTitle - $altTitle" else orgTitle
         val poster = fixUrlNull(document.selectFirst("picture.poster-auto img")?.attr("data-src"))
         val description = document.selectFirst("article.text-white p")?.text()?.trim()
         var year = document.selectFirst("div.release a")?.text()?.trim()?.toIntOrNull()
@@ -139,22 +125,15 @@ class HDFilmCehennemi2 : MainAPI() {
         val listItems = document.select("tbody tr").select("div")
         var duration = 0
         for (item in listItems) {
-            if (item.selectFirst("small")?.text()?.contains("Yıl") == true) {
-                year = item.selectFirst("a")?.text()?.toIntOrNull()
-            }
-            if (item.selectFirst("small")?.text()?.contains("Süre") == true) {
-                duration =
-                    item.selectFirst("strong")?.text()?.replace(" dakika", "")?.toIntOrNull()!!
-            }
+            if (item.selectFirst("small")?.text()?.contains("Yıl") == true) year = item.selectFirst("a")?.text()?.toIntOrNull()
+            if (item.selectFirst("small")?.text()?.contains("Süre") == true) duration = item.selectFirst("strong")?.text()?.replace(" dakika", "")?.toIntOrNull() ?: 0
         }
         document.select(".story-item").forEach {
             val img = fixUrlNull(it.selectFirst("img")?.attr("data-src"))
             val name = it.selectFirst("div.story-item-title")?.text() ?: ""
             actors.add(Actor(name = name, image = img))
         }
-        val recommendations =
-            document.select("div.glide__slide.poster-container")
-                .mapNotNull { it.toRecommendationResult() }
+        val recommendations = document.select("div.glide__slide.poster-container").mapNotNull { it.toRecommendationResult() }
 
         if (!url.contains("/dizi/")) {
             return newMovieLoadResponse(title, url, TvType.Movie, url) {
@@ -166,37 +145,29 @@ class HDFilmCehennemi2 : MainAPI() {
                 this.duration = duration
                 this.recommendations = recommendations
                 addActors(actors)
-                addTrailer("https://www.youtube.com/embed/$trailer")
+                trailer?.takeIf { it.isNotBlank() }?.let { addTrailer("https://www.youtube.com/embed/$it") }
             }
-        } else {
-            val episodes = mutableListOf<Episode>()
-            document.select("div.seasonsTabs-tabContent div").forEach { szn ->
-                val epSzn = szn.attr("id").substringAfter("seasons-").toIntOrNull()
-                szn.select("div.card-list-item").forEach {
-                    val epHref = it.selectFirst("a")?.attr("href") ?: ""
-                    val epName = it.selectFirst("h3")?.text()
-                    val epnum =
-                        epName?.substringAfter("Sezon ")?.substringBefore(". Bölüm")?.toIntOrNull()
-                    episodes.add(
-                        Episode(
-                            data = epHref,
-                            name = epName,
-                            season = epSzn,
-                            episode = epnum
-                        )
-                    )
-                }
+        }
+
+        val episodes = mutableListOf<Episode>()
+        document.select("div.seasonsTabs-tabContent div").forEach { szn ->
+            val epSzn = szn.attr("id").substringAfter("seasons-").toIntOrNull()
+            szn.select("div.card-list-item").forEach {
+                val epHref = it.selectFirst("a")?.attr("href") ?: ""
+                val epName = it.selectFirst("h3")?.text()
+                val epnum = epName?.substringAfter("Sezon ")?.substringBefore(". Bölüm")?.toIntOrNull()
+                episodes.add(Episode(data = epHref, name = epName, season = epSzn, episode = epnum))
             }
-            return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-                this.posterUrl = poster
-                this.plot = description
-                this.year = year
-                this.tags = tags
-                this.rating = rating
-                this.duration = duration
-                addActors(actors)
-                addTrailer(trailer)
-            }
+        }
+        return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
+            this.posterUrl = poster
+            this.plot = description
+            this.year = year
+            this.tags = tags
+            this.rating = rating
+            this.duration = duration
+            addActors(actors)
+            trailer?.takeIf { it.isNotBlank() }?.let { addTrailer(it) }
         }
     }
 
@@ -205,9 +176,7 @@ class HDFilmCehennemi2 : MainAPI() {
         val href = fixUrlNull(this.selectFirst("a")?.attr("href")) ?: ""
         val posterUrl = fixUrlNull(this.selectFirst("picture img")?.attr("data-src"))
         if (href.contains("/dizi/")) {
-            return newTvSeriesSearchResponse(title, href, TvType.Movie) {
-                this.posterUrl = posterUrl
-            }
+            return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
         } else {
             return newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
         }
@@ -222,57 +191,36 @@ class HDFilmCehennemi2 : MainAPI() {
         Log.d("HDC", "data » $data")
         val document = app.get(data).document
         if (document.select("div.tab-content div").size > 1) {
-            Log.d("HDC", "Alternatif 1den fazla")
             document.select("div.tab-content div").forEach {
                 var name = this.name
-                if (it.attr("id") == "videostr") {
-                    name = "Türkçe Dublaj"
-                } else if (it.attr("id") == "videosen") {
-                    name = "Türkçe Altyazılı"
-                }
+                if (it.attr("id") == "videostr") name = "Türkçe Dublaj"
+                else if (it.attr("id") == "videosen") name = "Türkçe Altyazılı"
                 it.select("a").forEach { el ->
                     val url = el.attr("href")
                     if (url == data) {
-                        val iframe =
-                            fixUrlNull(document.selectFirst("iframe")?.attr("data-src")) ?: ""
-                        Log.d("HDC", "iframe » $iframe")
-                        if (iframe.contains("vidload")) {
-                            vidloadExtract(iframe, name, callback)
-                        } else {
-                            loadExtractor(iframe, url, subtitleCallback, callback)
-                        }
+                        val iframe = fixUrlNull(document.selectFirst("iframe")?.attr("data-src")) ?: ""
+                        if (iframe.contains("vidload")) vidloadExtract(iframe, name, callback)
+                        else loadExtractor(iframe, url, subtitleCallback, callback)
                     } else {
                         val doc = app.get(url).document
                         val iframe = fixUrlNull(doc.selectFirst("iframe")?.attr("data-src")) ?: ""
-                        Log.d("HDC", "iframe » $iframe")
-                        if (iframe.contains("vidload")) {
-                            vidloadExtract(iframe, name, callback)
-                        } else {
-                            loadExtractor(iframe, url, subtitleCallback, callback)
-                        }
+                        if (iframe.contains("vidload")) vidloadExtract(iframe, name, callback)
+                        else loadExtractor(iframe, url, subtitleCallback, callback)
                     }
                 }
             }
         } else {
-            Log.d("HDC", "Tek alternatif var")
             val iframe = fixUrlNull(document.selectFirst("iframe")?.attr("data-src")) ?: ""
-            Log.d("HDC", "iframe » $iframe")
-            val name =
-                document.selectFirst("div.card-body")?.selectFirst("li.nav-item a")?.text() ?: ""
-            if (iframe.contains("vidload")) {
-                vidloadExtract(iframe, name, callback)
-            } else {
-                loadExtractor(iframe, data, subtitleCallback, callback)
-            }
+            val name = document.selectFirst("div.card-body")?.selectFirst("li.nav-item a")?.text() ?: ""
+            if (iframe.contains("vidload")) vidloadExtract(iframe, name, callback)
+            else loadExtractor(iframe, data, subtitleCallback, callback)
         }
         return true
     }
 
     suspend fun vidloadExtract(iframe: String, name: String, callback: (ExtractorLink) -> Unit) {
-        Log.d("HDC", "vidloadExtract » $iframe")
         if (iframe.contains("vidload")) {
             val url = iframe.replace("/iframe/", "/ajax/")
-            Log.d("HDC", "vidloadExtract » $url")
             val doc = app.get(
                 url,
                 headers = mapOf(
@@ -282,27 +230,19 @@ class HDFilmCehennemi2 : MainAPI() {
             ).document
             val json = ObjectMapper().readValue(doc.body().text(), Vidload::class.java)
             val newUrl = json.file ?: ""
-            Log.d("HDC", "vidloadExtract » $newUrl")
-            val qualities = mutableListOf<String>()
-            qualities.add("360p")
-            qualities.add("480p")
-            qualities.add("720p")
-            qualities.add("1080p")
-
-            qualities.forEachIndexed { index, s ->
+            listOf("360p", "480p", "720p", "1080p").forEach { quality ->
                 callback.invoke(
                     newExtractorLink(
                         source = this.name,
-                        name = "$s - Vidload - $name",
-                        url = newUrl.replace("playlist", s),
-                        ExtractorLinkType.M3U8
+                        name = "$quality - Vidload - $name",
+                        url = newUrl.replace("playlist", quality),
+                        type = ExtractorLinkType.M3U8
                     ) {
-                        this.referer = "https://vidload.lol/"
-                        this.quality = getQualityFromName(s)
+                        referer = "https://vidload.lol/"
+                        this.quality = getQualityFromName(quality)
                     }
                 )
             }
         }
     }
 }
-
