@@ -212,25 +212,81 @@ class HintFilmIzle : MainAPI() {
         }
     }
 
+    private fun playerUrl(value: String, baseUrl: String): String? {
+        val cleaned = value.trim()
+            .replace("&amp;", "&")
+            .removePrefix("\\\"")
+            .removeSuffix("\\\"")
+            .removePrefix("'")
+            .removeSuffix("'")
+            .replace("\\/", "/")
+
+        if (cleaned.isBlank() || cleaned.startsWith("javascript:") || cleaned == "about:blank") return null
+        return fixUrlNull(cleaned, baseUrl)
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (com.lagradost.cloudstream3.ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data).document
-        val frames = document.select(
-            "iframe[src], iframe[data-src], iframe[data-lazy-src], video source[src], source[src]"
-        ).mapNotNull { element ->
-            val value = element.attr("src").ifBlank {
-                element.attr("data-src").ifBlank { element.attr("data-lazy-src") }
-            }
-            fixUrlNull(value)
-        }.distinct()
+        val document = runCatching { app.get(data, referer = mainUrl).document }.getOrNull() ?: return false
+        val candidates = linkedSetOf<String>()
 
-        frames.forEach { frame ->
-            runCatching { loadExtractor(frame, data, subtitleCallback, callback) }
+        document.select("iframe, video, video source, source").forEach { element ->
+            listOf(
+                element.attr("src"),
+                element.attr("data-src"),
+                element.attr("data-lazy-src"),
+                element.attr("data-video"),
+                element.attr("data-video-src"),
+                element.attr("data-embed"),
+                element.attr("data-embed-url"),
+                element.attr("data-url"),
+                element.attr("data-player")
+            ).forEach { value ->
+                playerUrl(value, data)?.let { candidates.add(it) }
+            }
         }
-        return frames.isNotEmpty()
+
+        document.select("a[href]").forEach { element ->
+            playerUrl(element.attr("href"), data)?.let { url ->
+                val lower = url.lowercase()
+                if (lower.contains("videa.hu") || lower.contains("vk.com") || lower.contains("vkvideo.ru") ||
+                    lower.contains("ok.ru") || lower.contains("streamtape") || lower.contains("mixdrop") ||
+                    lower.contains("dood") || lower.contains("filemoon") || lower.contains("vidmoly") ||
+                    lower.contains("uqload") || lower.contains("streamwish") || lower.contains("voe.") ||
+                    lower.contains("vidplay") || lower.contains("filelions")) {
+                    candidates.add(url)
+                }
+            }
+        }
+
+        document.select("script:not([src])").forEach { script ->
+            Regex("https?://[^\\\"'\\s<>]+|//[^\\\"'\\s<>]+")
+                .findAll(script.data())
+                .mapNotNull { playerUrl(it.value, data) }
+                .forEach { url ->
+                    val lower = url.lowercase()
+                    if (lower.contains("videa.hu") || lower.contains("vk.com") || lower.contains("vkvideo.ru") ||
+                        lower.contains("ok.ru") || lower.contains("streamtape") || lower.contains("mixdrop") ||
+                        lower.contains("dood") || lower.contains("filemoon") || lower.contains("vidmoly") ||
+                        lower.contains("uqload") || lower.contains("streamwish") || lower.contains("voe.") ||
+                        lower.contains("vidplay") || lower.contains("filelions")) {
+                        candidates.add(url)
+                    }
+                }
+        }
+
+        var extracted = false
+        candidates.forEach { candidate ->
+            runCatching {
+                loadExtractor(candidate, data, subtitleCallback, callback)
+                extracted = true
+            }
+        }
+
+        return extracted
     }
 }
