@@ -201,24 +201,82 @@ class HintFilmIzle : MainAPI() {
             lower.contains("twitter.com") || lower.contains("x.com")
     }
 
-    private fun collectRealPlayerUrls(document: Document): List<String> {
-        // HintFilmIzle'nin gerçek sayfasında tam film player'ı data-frame ile veriliyor.
-        // Örnek: https://player.hintfilmizle.com/embed/333517
-        return document.select("a[data-frame]")
-            .filter { it.text().trim().contains("TEKPART", true) }
-            .mapNotNull { fixUrlNull(it.attr("data-frame")) }
-            .filter { !isTrailer(it) }
-            .distinct()
+    private fun normalizePlayerUrl(value: String, baseUrl: String): String? {
+        val cleaned = value.trim()
+            .replace("&amp;", "&")
+            .replace("\\/", "/")
+            .removePrefix("\\\"")
+            .removeSuffix("\\\"")
+            .removePrefix("'")
+            .removeSuffix("'")
+        if (cleaned.isBlank() || cleaned == "about:blank" || cleaned.startsWith("javascript:")) return null
+        return fixUrlNull(cleaned, baseUrl)?.takeIf { !isTrailer(it) }
     }
 
-    private fun collectMediaUrls(document: Document): List<String> {
+    private fun collectPlayerUrls(document: Document, baseUrl: String): List<String> {
         val result = linkedSetOf<String>()
-        document.select("video[src], source[src], iframe[src], embed[src]").forEach { element ->
-            fixUrlNull(element.attr("src"))?.let { url ->
-                if (!isTrailer(url)) result += url
+
+        // Sitenin TEKPART oynatıcısı için kullanılan ana alan.
+        document.select("a[data-frame], [data-frame]").forEach { element ->
+            normalizePlayerUrl(element.attr("data-frame"), baseUrl)?.let { result += it }
+        }
+
+        // Eski/yeni player işaretlemelerini de destekle.
+        document.select("iframe, embed, video, source, a[href]").forEach { element ->
+            listOf(
+                element.attr("src"),
+                element.attr("data-src"),
+                element.attr("data-lazy-src"),
+                element.attr("data-litespeed-src"),
+                element.attr("data-frame"),
+                element.attr("data-player"),
+                element.attr("data-video"),
+                element.attr("data-video-src"),
+                element.attr("data-embed"),
+                element.attr("data-embed-url"),
+                element.attr("data-url"),
+                element.attr("href")
+            ).forEach { value ->
+                normalizePlayerUrl(value, baseUrl)?.let { url ->
+                    val lower = url.lowercase()
+                    if (element.tagName() != "a" ||
+                        lower.contains("videa.hu") || lower.contains("vk.com") || lower.contains("vkvideo.ru") ||
+                        lower.contains("ok.ru") || lower.contains("streamtape") || lower.contains("mixdrop") ||
+                        lower.contains("dood") || lower.contains("filemoon") || lower.contains("vidmoly") ||
+                        lower.contains("uqload") || lower.contains("streamwish") || lower.contains("voe.") ||
+                        lower.contains("vidplay") || lower.contains("filelions") || lower.contains("player")) {
+                        result += url
+                    }
+                }
             }
         }
-        document.select("script").forEach { script ->
+
+        // Player URL'si JavaScript içine gömülüyse onu da yakala.
+        document.select("script:not([src])").forEach { script ->
+            Regex("(?:https?:)?//[^\\\"'\\s<>]+", RegexOption.IGNORE_CASE)
+                .findAll(script.data())
+                .mapNotNull { normalizePlayerUrl(it.value, baseUrl) }
+                .forEach { url ->
+                    val lower = url.lowercase()
+                    if (lower.contains("videa.hu") || lower.contains("vk.com") || lower.contains("vkvideo.ru") ||
+                        lower.contains("ok.ru") || lower.contains("streamtape") || lower.contains("mixdrop") ||
+                        lower.contains("dood") || lower.contains("filemoon") || lower.contains("vidmoly") ||
+                        lower.contains("uqload") || lower.contains("streamwish") || lower.contains("voe.") ||
+                        lower.contains("vidplay") || lower.contains("filelions") || lower.contains("player")) {
+                        result += url
+                    }
+                }
+        }
+
+        return result.toList()
+    }
+
+    private fun collectMediaUrls(document: Document, baseUrl: String): List<String> {
+        val result = linkedSetOf<String>()
+        document.select("video[src], source[src], iframe[src], embed[src]").forEach { element ->
+            normalizePlayerUrl(element.attr("src"), baseUrl)?.let { result += it }
+        }
+        document.select("script:not([src])").forEach { script ->
             Regex("https?://[^\\\"'\\s<>]+(?:m3u8|mp4)(?:\\?[^\\\"'\\s<>]+)?", RegexOption.IGNORE_CASE)
                 .findAll(script.data())
                 .forEach { result += it.value }
@@ -234,7 +292,6 @@ class HintFilmIzle : MainAPI() {
     ): Boolean {
         if (isTrailer(url)) return false
         var found = false
-
         runCatching {
             loadExtractor(url, referer, subtitleCallback) { link ->
                 found = true
@@ -242,10 +299,10 @@ class HintFilmIzle : MainAPI() {
             }
         }
 
-        // Player sayfası JS ile kaynak üretiyor. Yine de HTML'de doğrudan medya varsa onu kaçırma.
+        // Bazı player sayfaları kaynağı HTML/JS içinde doğrudan veriyor.
         runCatching {
             val playerDocument = app.get(url, referer = referer).document
-            collectMediaUrls(playerDocument).forEach { media ->
+            collectMediaUrls(playerDocument, url).forEach { media ->
                 runCatching {
                     loadExtractor(media, url, subtitleCallback) { link ->
                         found = true
@@ -263,18 +320,15 @@ class HintFilmIzle : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = runCatching { app.get(data).document }.getOrNull() ?: return false
+        val document = runCatching { app.get(data, referer = mainUrl).document }.getOrNull() ?: return false
         var found = false
 
-        // SADECE gerçek TEKPART bağlantısını kullan. Sayfadaki JS/CSS/linkleri tarama.
-        val playerUrls = collectRealPlayerUrls(document)
-        for (player in playerUrls) {
+        for (player in collectPlayerUrls(document, data)) {
             if (tryExtractor(player, data, subtitleCallback, callback)) found = true
         }
 
-        // TEKPART bulunamazsa, sayfadaki doğrudan medya elementlerini dene.
         if (!found) {
-            collectMediaUrls(document).forEach { media ->
+            for (media in collectMediaUrls(document, data)) {
                 if (tryExtractor(media, data, subtitleCallback, callback)) found = true
             }
         }
