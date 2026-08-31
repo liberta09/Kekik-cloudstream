@@ -18,6 +18,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.Base64
@@ -101,8 +102,7 @@ class HintFilmIzle : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val urls = listOf("$mainUrl/?s=$encoded", "$mainUrl/film?s=$encoded", "$mainUrl/film-izle?s=$encoded")
-        for (url in urls) {
+        for (url in listOf("$mainUrl/?s=$encoded", "$mainUrl/film?s=$encoded", "$mainUrl/film-izle?s=$encoded")) {
             val results = runCatching { extractResults(app.get(url).document) }.getOrNull().orEmpty()
             if (results.isNotEmpty()) return results
         }
@@ -136,7 +136,8 @@ class HintFilmIzle : MainAPI() {
         repeat(2) { cleaned = runCatching { URLDecoder.decode(cleaned, "UTF-8") }.getOrDefault(cleaned) }
         cleaned = cleaned.removePrefix("\\\"").removeSuffix("\\\"").removePrefix("'").removeSuffix("'").trim()
         if (cleaned.isBlank() || cleaned == "about:blank" || cleaned.startsWith("javascript:")) return null
-        return fixUrlNull(cleaned, baseUrl)?.takeIf { !isTrailer(it) }
+        val absolute = if (cleaned.startsWith("http://", true) || cleaned.startsWith("https://", true)) cleaned else runCatching { URI(baseUrl).resolve(cleaned).toString() }.getOrNull() ?: return null
+        return fixUrlNull(absolute)?.takeIf { !isTrailer(it) }
     }
 
     private fun addCandidate(value: String, baseUrl: String, result: MutableSet<String>) {
@@ -179,9 +180,7 @@ class HintFilmIzle : MainAPI() {
         runCatching { loadExtractor(url, referer, subtitleCallback) { link -> found = true; callback(link) } }
         runCatching {
             val playerDocument = app.get(url, referer = referer).document
-            collectMediaUrls(playerDocument, url).forEach { media ->
-                runCatching { loadExtractor(media, url, subtitleCallback) { link -> found = true; callback(link) } }
-            }
+            collectMediaUrls(playerDocument, url).forEach { media -> runCatching { loadExtractor(media, url, subtitleCallback) { link -> found = true; callback(link) } } }
         }
         return found
     }
